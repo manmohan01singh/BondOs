@@ -560,7 +560,6 @@ function createNewContact() {
 /* ================================================================
    6. RENDER FUNCTIONS
 ================================================================ */
-
 function renderCard(contact) {
   if (!contact) {
     // Show empty-state on the card
@@ -578,6 +577,13 @@ function renderCard(contact) {
     birthdayBanner.style.display = 'none';
     cardAvatar.innerHTML = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5z"/></svg>`;
     cardAvatar.style.backgroundColor = '#d1d5db';
+    
+    // Clean up extensions
+    const streakEl = document.getElementById('streak-badge');
+    if (streakEl) streakEl.style.display = 'none';
+    document.documentElement.style.removeProperty('--contact-accent');
+    const moodGraphEl = document.getElementById('mood-history-graph');
+    if (moodGraphEl) moodGraphEl.innerHTML = '';
     return;
   }
 
@@ -639,6 +645,11 @@ function renderCard(contact) {
 
   // ── Online status dot & friend live status ──
   refreshPresenceUI(contact);
+
+  // ── Hook new features ──
+  updateStreakBadge(contact);
+  applyContactTheme(contact);
+  renderMoodGraph(contact);
 
   // Update chat drawer avatar color if open
   if (chatOverlay.classList.contains('active')) {
@@ -932,7 +943,11 @@ function updateContactCardFromFriendData(friendUid, data) {
     if (data.name && c.name !== data.name) { c.name = data.name; changed = true; }
     if (data.photoUrl && c.imageUrl !== data.photoUrl) { c.imageUrl = data.photoUrl; changed = true; }
     if (data.bio && c.city !== data.bio) { c.city = data.bio; changed = true; }
-    if (data.mood && c.mood !== data.mood) { c.mood = data.mood; changed = true; }
+    if (data.mood && c.mood !== data.mood) {
+      c.mood = data.mood;
+      changed = true;
+      recordMoodEntry(c, data.mood);
+    }
     if (data.birthday && c.birthday !== data.birthday) { c.birthday = data.birthday; changed = true; }
     if (data.favColor && c.avatarColor !== data.favColor) { c.avatarColor = data.favColor; changed = true; }
     if (data.emergencyContact) {
@@ -1411,7 +1426,11 @@ function sendScheduledMessage(contact, text) {
   const isLocal = !contact.linkedUid;
   const roomId = isLocal ? `local_${contact.id}` : makeRoomId(myUid, contact.linkedUid);
   const now = Date.now();
-  const receiverId = isLocal ? '' : roomId.replace(myUid, '').replace('__', '');
+  // FIX: properly compute receiverId from roomId parts
+  let receiverId = '';
+  if (!isLocal && contact.linkedUid) {
+    receiverId = contact.linkedUid;
+  }
 
   const msg = {
     id:         now.toString(),
@@ -1419,7 +1438,7 @@ function sendScheduledMessage(contact, text) {
     senderId:   myUid,
     receiverId: receiverId,
     type:       'reminder',
-    text:       text,
+    text:       `🤖 [Auto] ${text}`,
     timestamp:  now,
     read:       false,
     status:     'sent'
@@ -1456,10 +1475,18 @@ function checkScheduledMessages() {
       changed = true;
       sendScheduledMessage(c, c.scheduledMessage.text);
 
-      if (Notification.permission === 'granted') {
+      // FIX: use SW postMessage for reliable background notification (icon must be URL)
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+          type: 'SHOW_NOTIFICATION',
+          title: '🤖 Scheduled Message Sent',
+          body: `Sent to ${c.name}: "${c.scheduledMessage.text}"`,
+          tag: 'scheduled-msg'
+        });
+      } else if (Notification.permission === 'granted') {
         new Notification('🤖 Scheduled Message Sent', {
           body: `Sent to ${c.name}: "${c.scheduledMessage.text}"`,
-          icon: '📇'
+          icon: './icon-192.png'
         });
       }
     }
@@ -2691,6 +2718,7 @@ function sendChatMessage() {
     c.lastTalk = 'Just now';
     c.lastTalkTimestamp = Date.now();
     cardLastTalk.textContent = 'Just now';
+    recordCheckIn(c);
     saveContacts();
   }
 }
@@ -3956,6 +3984,7 @@ function sendPing() {
 
   // Update check-in count
   c.checkIns = (c.checkIns || 0) + 1;
+  recordCheckIn(c);
   saveContacts();
 
   // Ping animation on button
@@ -4023,6 +4052,12 @@ function switchMemoriesTab(tab) {
     btnMems?.classList.remove('active');
     paneCaps?.classList.add('active');
     paneMems?.classList.remove('active');
+    // FIX: Always refresh capsule list when tab is switched to capsules
+    const c = contacts[currentIndex];
+    if (c) {
+      const roomId = c.linkedUid ? makeRoomId(myUid, c.linkedUid) : `local_${c.id}`;
+      renderCapsulesTimeline(roomId);
+    }
   }
 }
 
@@ -5053,16 +5088,29 @@ async function init() {
   // 5. Firebase (always try; falls back to demo mode on error)
   await initFirebase();
 
-  // 5. Register PWA Service Worker
+  // 5. Register PWA Service Worker with auto-update
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js', { scope: './' })
       .then(reg => {
         console.log('📱 Service Worker registered:', reg.scope);
         reg.addEventListener('updatefound', () => {
-          showToast('🔄 App update available — reload to apply', 'info', 8000);
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              // New SW installed — send SKIP_WAITING to trigger immediate take-over
+              showToast('🔄 App updating automatically…', 'info', 3000);
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
         });
       })
       .catch(err => console.warn('📱 SW registration failed:', err));
+
+    // When a new SW takes control, reload all clients to serve fresh files
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
+    });
   }
 
   // 6. Request notification permission (deferred — must follow user gesture ideally)
@@ -5165,4 +5213,715 @@ document.getElementById('btn-close-capsule-open')?.addEventListener('click', () 
   document.getElementById('capsule-open-overlay').classList.remove('active');
 });
 
+
+/* ================================================================
+   33. RELATIONSHIP INSIGHTS DASHBOARD
+================================================================ */
+function openInsightsDashboard() {
+  const overlay = document.getElementById('insights-overlay');
+  if (!overlay) return;
+
+  const total = contacts.length;
+  const avgScore = total ? Math.round(contacts.reduce((s, c) => s + calculateHealthScore(c), 0) / total) : 0;
+  const neglected = contacts.filter(c => {
+    const ts = c.lastTalkTimestamp || 0;
+    return ts > 0 && (Date.now() - ts) > 30 * 864e5;
+  });
+  const favorites = contacts.filter(c => c.isFavorite);
+  const soon = contacts.filter(c => {
+    if (!c.birthday) return false;
+    const now = new Date();
+    const bday = new Date(c.birthday + ' ' + now.getFullYear());
+    if (bday < now) bday.setFullYear(now.getFullYear() + 1);
+    const diff = (bday - now) / 864e5;
+    return diff >= 0 && diff <= 7;
+  });
+
+  const topContacts = [...contacts].sort((a, b) => calculateHealthScore(b) - calculateHealthScore(a)).slice(0, 3);
+  const cats = {};
+  contacts.forEach(c => { cats[c.category || 'Other'] = (cats[c.category || 'Other'] || 0) + 1; });
+
+  const el = document.getElementById('insights-content');
+  if (!el) return;
+
+  el.innerHTML = `
+    <div class="insights-grid">
+      <div class="insight-card insight-card--blue">
+        <div class="insight-icon">👥</div>
+        <div class="insight-val">${total}</div>
+        <div class="insight-lbl">Total Contacts</div>
+      </div>
+      <div class="insight-card insight-card--green">
+        <div class="insight-icon">❤️‍🔥</div>
+        <div class="insight-val">${avgScore}</div>
+        <div class="insight-lbl">Avg Bond Score</div>
+      </div>
+      <div class="insight-card insight-card--orange">
+        <div class="insight-icon">⭐</div>
+        <div class="insight-val">${favorites.length}</div>
+        <div class="insight-lbl">Favorites</div>
+      </div>
+      <div class="insight-card insight-card--red">
+        <div class="insight-icon">😴</div>
+        <div class="insight-val">${neglected.length}</div>
+        <div class="insight-lbl">Need Attention</div>
+      </div>
+    </div>
+
+    ${soon.length ? `<div class="insights-section"><h4>🎂 Upcoming Birthdays (7 days)</h4>
+      ${soon.map(c => `<div class="insight-list-item"><span>${c.name}</span><span>${c.birthday}</span></div>`).join('')}
+    </div>` : ''}
+
+    <div class="insights-section">
+      <h4>🏆 Top Bonds</h4>
+      ${topContacts.map((c, i) => {
+        const score = calculateHealthScore(c);
+        return `<div class="insight-list-item">
+          <span>${['🥇','🥈','🥉'][i]} ${c.name}</span>
+          <div class="insight-bar-wrap"><div class="insight-bar-fill" style="width:${score}%"></div><span>${score}</span></div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    ${neglected.length ? `<div class="insights-section insights-section--warn">
+      <h4>⚠️ Haven't talked in 30+ days</h4>
+      ${neglected.slice(0,5).map(c => `<div class="insight-list-item">
+        <span>${c.name}</span>
+        <button class="insight-nudge-btn" onclick="openNudgeForContact('${c.id}')">Reconnect</button>
+      </div>`).join('')}
+    </div>` : ''}
+
+    <div class="insights-section">
+      <h4>📊 By Category</h4>
+      <div class="insights-cats">
+        ${Object.entries(cats).map(([cat, count]) =>
+          `<div class="insight-cat-pill"><span>${cat}</span><span class="insight-cat-count">${count}</span></div>`
+        ).join('')}
+      </div>
+    </div>
+  `;
+
+  overlay.classList.add('active');
+}
+
+function openNudgeForContact(id) {
+  document.getElementById('insights-overlay')?.classList.remove('active');
+  const idx = contacts.findIndex(c => String(c.id) === String(id));
+  if (idx >= 0) {
+    currentIndex = idx;
+    renderCard(contacts[currentIndex]);
+    setTimeout(() => {
+      openChatDrawer(contacts[currentIndex]);
+      chatInputField.value = `Hey ${contacts[currentIndex].name.split(' ')[0]}! 👋 It's been a while, how are you doing?`;
+    }, 300);
+  }
+}
+
+document.getElementById('btn-insights')?.addEventListener('click', openInsightsDashboard);
+document.getElementById('btn-close-insights')?.addEventListener('click', () => {
+  document.getElementById('insights-overlay')?.classList.remove('active');
+});
+document.getElementById('insights-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('insights-overlay'))
+    document.getElementById('insights-overlay').classList.remove('active');
+});
+
+
+/* ================================================================
+   34. CHECK-IN STREAK TRACKER
+================================================================ */
+function updateStreakBadge(contact) {
+  if (!contact) return;
+  const streak = contact.checkInStreak || 0;
+  const el = document.getElementById('streak-badge');
+  if (el) {
+    el.textContent = streak > 0 ? `🔥 ${streak}d streak` : '';
+    el.style.display = streak > 0 ? 'inline-flex' : 'none';
+  }
+}
+
+function recordCheckIn(contact) {
+  if (!contact) return;
+  const today = new Date().toDateString();
+  const lastCheckIn = contact.lastCheckInDate || '';
+  const yesterday = new Date(Date.now() - 864e5).toDateString();
+
+  if (lastCheckIn === today) return; // Already checked in today
+
+  if (lastCheckIn === yesterday) {
+    contact.checkInStreak = (contact.checkInStreak || 0) + 1;
+  } else if (lastCheckIn !== today) {
+    contact.checkInStreak = 1;
+  }
+
+  contact.lastCheckInDate = today;
+  saveContacts();
+  updateStreakBadge(contact);
+
+  if (contact.checkInStreak >= 7) {
+    showToast(`🔥 ${contact.checkInStreak}-day streak with ${contact.name}! Amazing!`, 'success', 4000);
+  }
+}
+
+
+/* ================================================================
+   35. MESSAGE TEMPLATES LIBRARY
+================================================================ */
+const MESSAGE_TEMPLATES = [
+  { label: '👋 Hey there', text: 'Hey! Just thinking of you 👋' },
+  { label: '🎂 Happy Birthday', text: 'Wishing you a wonderful birthday! Hope this year brings you everything you deserve 🎂🎉' },
+  { label: '☀️ Good Morning', text: 'Good morning! Hope you have an amazing day ahead ☀️' },
+  { label: '🌙 Good Night', text: 'Good night! Sweet dreams 🌙✨' },
+  { label: '🤔 Checking In', text: 'Hey, just checking in — how are things going? 😊' },
+  { label: '💪 You Got This', text: 'Thinking of you! You got this 💪 Let me know if you need anything.' },
+  { label: '😢 Miss You', text: 'Miss you so much! We should catch up soon 😢💙' },
+  { label: '🎉 Congratulations', text: 'Congratulations!! So proud of you, you deserve this! 🎉🥳' },
+  { label: '🙏 Thank You', text: 'Thank you so much for everything. Truly appreciate you 🙏❤️' },
+  { label: '☕ Coffee?', text: 'Hey, want to grab coffee soon? Would love to catch up ☕😊' },
+  { label: '💖 Thinking of you', text: 'Just wanted to say I was thinking of you and hope you\'re doing well 💖' },
+  { label: '📖 Share Something', text: 'Hey! I just saw something that made me think of you — we should talk soon!' },
+];
+
+function openTemplateLibrary() {
+  const overlay = document.getElementById('templates-overlay');
+  if (!overlay) return;
+
+  const list = document.getElementById('templates-list');
+  if (!list) return;
+
+  list.innerHTML = MESSAGE_TEMPLATES.map((t, i) => `
+    <div class="template-item" data-idx="${i}" tabindex="0" role="button">
+      <div class="template-label">${t.label}</div>
+      <div class="template-preview">${t.text}</div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.template-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const tmpl = MESSAGE_TEMPLATES[parseInt(item.dataset.idx)];
+      if (chatInputField) chatInputField.value = tmpl.text;
+      overlay.classList.remove('active');
+      chatInputField?.focus();
+      showToast('📋 Template loaded!', 'success', 2000);
+    });
+  });
+
+  overlay.classList.add('active');
+}
+
+document.getElementById('btn-template-library')?.addEventListener('click', openTemplateLibrary);
+document.getElementById('btn-close-templates')?.addEventListener('click', () => {
+  document.getElementById('templates-overlay')?.classList.remove('active');
+});
+document.getElementById('templates-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('templates-overlay'))
+    document.getElementById('templates-overlay').classList.remove('active');
+});
+
+
+/* ================================================================
+   36. MOOD HISTORY GRAPH
+================================================================ */
+const MOOD_SCORE = { '😊': 5, '🔥': 5, '🤔': 3, '😴': 2, '😢': 1 };
+
+function recordMoodEntry(contact, mood) {
+  if (!contact) return;
+  if (!contact.moodHistory) contact.moodHistory = [];
+  const today = new Date().toDateString();
+  // Update or add today's mood
+  const existing = contact.moodHistory.findIndex(m => new Date(m.ts).toDateString() === today);
+  if (existing >= 0) {
+    contact.moodHistory[existing] = { mood, ts: Date.now() };
+  } else {
+    contact.moodHistory.push({ mood, ts: Date.now() });
+  }
+  // Keep last 14 days only
+  contact.moodHistory = contact.moodHistory.slice(-14);
+  saveContacts();
+  renderMoodGraph(contact);
+}
+
+function renderMoodGraph(contact) {
+  const el = document.getElementById('mood-history-graph');
+  if (!el || !contact) return;
+
+  const history = (contact.moodHistory || []).slice(-7);
+  if (!history.length) {
+    el.innerHTML = '<span class="mood-graph-empty">No mood history yet</span>';
+    return;
+  }
+
+  el.innerHTML = history.map(m => {
+    const d = new Date(m.ts);
+    const label = d.toLocaleDateString([], { weekday: 'short' });
+    return `<div class="mood-graph-bar">
+      <span class="mood-graph-emoji">${m.mood}</span>
+      <div class="mood-graph-track"><div class="mood-graph-fill" style="height:${(MOOD_SCORE[m.mood] || 3) * 20}%"></div></div>
+      <span class="mood-graph-day">${label}</span>
+    </div>`;
+  }).join('');
+}
+
+
+/* ================================================================
+   37. SMART NUDGE ENGINE
+================================================================ */
+function checkNudges() {
+  const neglected = contacts.filter(c => {
+    const ts = c.lastTalkTimestamp || 0;
+    return ts > 0 && (Date.now() - ts) > 14 * 864e5 && !c.nudgeDismissed;
+  });
+
+  if (!neglected.length) return;
+
+  const c = neglected[0];
+  const days = Math.floor((Date.now() - (c.lastTalkTimestamp || 0)) / 864e5);
+  const nudge = document.getElementById('nudge-banner');
+  const nudgeName = document.getElementById('nudge-name');
+  const nudgeDays = document.getElementById('nudge-days');
+
+  if (nudge && nudgeName && nudgeDays) {
+    nudgeName.textContent = c.name;
+    nudgeDays.textContent = days + 'd ago';
+    nudge.dataset.contactId = c.id;
+    nudge.style.display = 'flex';
+    setTimeout(() => nudge.classList.add('nudge-visible'), 50);
+  }
+}
+
+document.getElementById('nudge-banner')?.addEventListener('click', function() {
+  const id = this.dataset.contactId;
+  const idx = contacts.findIndex(c => String(c.id) === String(id));
+  if (idx >= 0) {
+    currentIndex = idx;
+    renderCard(contacts[currentIndex]);
+    recordCheckIn(contacts[currentIndex]);
+    openChatDrawer(contacts[currentIndex]);
+    chatInputField.value = `Hey ${contacts[currentIndex].name.split(' ')[0]}! 👋 It's been a while!`;
+  }
+  this.classList.remove('nudge-visible');
+  setTimeout(() => { this.style.display = 'none'; }, 400);
+});
+
+document.getElementById('nudge-dismiss')?.addEventListener('click', function(e) {
+  e.stopPropagation();
+  const banner = document.getElementById('nudge-banner');
+  const id = banner?.dataset.contactId;
+  const c = contacts.find(c => String(c.id) === String(id));
+  if (c) { c.nudgeDismissed = true; saveContacts(); }
+  banner?.classList.remove('nudge-visible');
+  setTimeout(() => { if (banner) banner.style.display = 'none'; }, 400);
+});
+
+
+/* ================================================================
+   38. CONTACT THEMES
+================================================================ */
+function applyContactTheme(contact) {
+  const root = document.documentElement;
+  const color = contact?.themeColor || accentColor || '#f97316';
+  root.style.setProperty('--contact-accent', color);
+  const card = document.getElementById('profile-card');
+  if (card) {
+    // Compute a light version
+    card.style.setProperty('--card-accent', color);
+  }
+}
+
+function openThemePicker(contact) {
+  const overlay = document.getElementById('theme-picker-overlay');
+  if (!overlay) return;
+  overlay.classList.add('active');
+
+  const colors = ['#f97316','#3b82f6','#10b981','#a855f7','#ec4899','#eab308','#ef4444','#06b6d4','#84cc16','#f43f5e'];
+  const grid = document.getElementById('theme-color-grid');
+  if (!grid) return;
+  grid.innerHTML = colors.map(col => `
+    <button class="theme-color-swatch ${(contact?.themeColor === col) ? 'active' : ''}" 
+            style="background:${col}" data-color="${col}"></button>
+  `).join('');
+
+  grid.querySelectorAll('.theme-color-swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      const c = contacts[currentIndex];
+      if (!c) return;
+      c.themeColor = swatch.dataset.color;
+      applyContactTheme(c);
+      saveContacts();
+      grid.querySelectorAll('.theme-color-swatch').forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+      showToast('🎨 Theme applied!', 'success', 2000);
+    });
+  });
+}
+
+document.getElementById('btn-theme-picker')?.addEventListener('click', () => {
+  openThemePicker(contacts[currentIndex]);
+});
+document.getElementById('btn-close-theme-picker')?.addEventListener('click', () => {
+  document.getElementById('theme-picker-overlay')?.classList.remove('active');
+});
+document.getElementById('theme-picker-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('theme-picker-overlay'))
+    document.getElementById('theme-picker-overlay').classList.remove('active');
+});
+
+
+/* ================================================================
+   39. ANNIVERSARY & MILESTONES TRACKER
+================================================================ */
+function openMilestonesModal() {
+  const overlay = document.getElementById('milestones-overlay');
+  if (!overlay) return;
+  const c = contacts[currentIndex];
+  if (!c) return;
+  renderMilestones(c);
+  overlay.classList.add('active');
+}
+
+function renderMilestones(contact) {
+  const list = document.getElementById('milestones-list');
+  if (!list) return;
+  const items = contact.milestones || [];
+  if (!items.length) {
+    list.innerHTML = '<p class="milestones-empty">No milestones yet. Add your first memory date!</p>';
+    return;
+  }
+  list.innerHTML = items.map((m, i) => {
+    const d = new Date(m.date);
+    const now = new Date();
+    const anniversary = new Date(m.date);
+    anniversary.setFullYear(now.getFullYear());
+    if (anniversary < now) anniversary.setFullYear(now.getFullYear() + 1);
+    const daysUntil = Math.ceil((anniversary - now) / 864e5);
+    return `<div class="milestone-item">
+      <div class="milestone-icon">${m.icon || '🎯'}</div>
+      <div class="milestone-body">
+        <div class="milestone-title">${escapeHtml(m.title)}</div>
+        <div class="milestone-date">${d.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+        <div class="milestone-countdown">${daysUntil <= 7 ? `<span class="milestone-soon">🔔 In ${daysUntil} days!</span>` : `Next: ${daysUntil}d away`}</div>
+      </div>
+      <button class="milestone-del" data-idx="${i}">×</button>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.milestone-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      contact.milestones.splice(parseInt(btn.dataset.idx), 1);
+      saveContacts();
+      renderMilestones(contact);
+    });
+  });
+}
+
+function addMilestone() {
+  const c = contacts[currentIndex];
+  if (!c) return;
+  const title = document.getElementById('input-milestone-title')?.value.trim();
+  const date = document.getElementById('input-milestone-date')?.value;
+  const icon = document.getElementById('input-milestone-icon')?.value.trim() || '🎯';
+  if (!title || !date) { showToast('Please fill in both title and date', 'warn'); return; }
+  if (!c.milestones) c.milestones = [];
+  c.milestones.push({ title, date, icon, addedAt: Date.now() });
+  c.milestones.sort((a, b) => new Date(a.date) - new Date(b.date));
+  saveContacts();
+  renderMilestones(c);
+  document.getElementById('input-milestone-title').value = '';
+  document.getElementById('input-milestone-date').value = '';
+  document.getElementById('input-milestone-icon').value = '';
+  showToast('🎯 Milestone added!', 'success');
+}
+
+function checkMilestoneNotifications() {
+  contacts.forEach(c => {
+    (c.milestones || []).forEach(m => {
+      const d = new Date(m.date);
+      const now = new Date();
+      const anniversary = new Date(m.date);
+      anniversary.setFullYear(now.getFullYear());
+      if (anniversary < now) anniversary.setFullYear(now.getFullYear() + 1);
+      const daysUntil = Math.ceil((anniversary - now) / 864e5);
+      if (daysUntil <= 3 && daysUntil >= 0 && !m._notified) {
+        m._notified = true;
+        showToast(`🎯 ${m.title} with ${c.name} in ${daysUntil} days!`, 'info', 6000);
+      }
+    });
+  });
+}
+
+document.getElementById('btn-milestones')?.addEventListener('click', openMilestonesModal);
+document.getElementById('btn-add-milestone')?.addEventListener('click', addMilestone);
+document.getElementById('btn-close-milestones')?.addEventListener('click', () => {
+  document.getElementById('milestones-overlay')?.classList.remove('active');
+});
+document.getElementById('milestones-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('milestones-overlay'))
+    document.getElementById('milestones-overlay').classList.remove('active');
+});
+
+
+/* ================================================================
+   40. SHARED GOALS & PROMISES
+================================================================ */
+function openGoalsModal() {
+  const overlay = document.getElementById('goals-overlay');
+  if (!overlay) return;
+  const c = contacts[currentIndex];
+  if (!c) return;
+  renderGoals(c);
+  overlay.classList.add('active');
+}
+
+function renderGoals(contact) {
+  const list = document.getElementById('goals-list');
+  if (!list) return;
+  const goals = contact.goals || [];
+  if (!goals.length) {
+    list.innerHTML = '<p class="goals-empty">No shared goals yet. Make a promise!</p>';
+    return;
+  }
+  list.innerHTML = goals.map((g, i) => `
+    <div class="goal-item ${g.done ? 'goal-done' : ''}">
+      <button class="goal-check" data-idx="${i}" title="Mark complete">${g.done ? '✅' : '⬜'}</button>
+      <div class="goal-body">
+        <div class="goal-title">${escapeHtml(g.title)}</div>
+        ${g.deadline ? `<div class="goal-deadline">📅 Due: ${new Date(g.deadline).toLocaleDateString()}</div>` : ''}
+      </div>
+      <button class="goal-del" data-idx="${i}">×</button>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('.goal-check').forEach(btn => {
+    btn.addEventListener('click', () => {
+      contact.goals[parseInt(btn.dataset.idx)].done = !contact.goals[parseInt(btn.dataset.idx)].done;
+      saveContacts();
+      renderGoals(contact);
+      if (contact.goals[parseInt(btn.dataset.idx)]?.done) {
+        showToast('🎉 Goal completed! Great work!', 'success');
+        triggerConfetti();
+      }
+    });
+  });
+  list.querySelectorAll('.goal-del').forEach(btn => {
+    btn.addEventListener('click', () => {
+      contact.goals.splice(parseInt(btn.dataset.idx), 1);
+      saveContacts();
+      renderGoals(contact);
+    });
+  });
+}
+
+function addGoal() {
+  const c = contacts[currentIndex];
+  if (!c) return;
+  const title = document.getElementById('input-goal-title')?.value.trim();
+  const deadline = document.getElementById('input-goal-deadline')?.value;
+  if (!title) { showToast('Enter a goal or promise', 'warn'); return; }
+  if (!c.goals) c.goals = [];
+  c.goals.push({ title, deadline, done: false, addedAt: Date.now() });
+  saveContacts();
+  renderGoals(c);
+  document.getElementById('input-goal-title').value = '';
+  document.getElementById('input-goal-deadline').value = '';
+  showToast('🤝 Goal/promise added!', 'success');
+
+  // Sync to Firebase if connected
+  if (db && isFirebaseLive && c.linkedUid) {
+    const roomId = makeRoomId(myUid, c.linkedUid);
+    db.ref(`rooms/${roomId}/goals`).set(c.goals).catch(console.error);
+  }
+}
+
+document.getElementById('btn-goals')?.addEventListener('click', openGoalsModal);
+document.getElementById('btn-add-goal')?.addEventListener('click', addGoal);
+document.getElementById('btn-close-goals')?.addEventListener('click', () => {
+  document.getElementById('goals-overlay')?.classList.remove('active');
+});
+document.getElementById('goals-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('goals-overlay'))
+    document.getElementById('goals-overlay').classList.remove('active');
+});
+
+
+/* ================================================================
+   41. PRIVATE VAULT (PIN-protected)
+================================================================ */
+let _vaultUnlocked = false;
+
+function openVaultModal() {
+  const overlay = document.getElementById('vault-overlay');
+  if (!overlay) return;
+  _vaultUnlocked = false;
+  document.getElementById('vault-locked-view')?.style.setProperty('display', 'flex');
+  document.getElementById('vault-unlocked-view')?.style.setProperty('display', 'none');
+  document.getElementById('vault-pin-input').value = '';
+  overlay.classList.add('active');
+}
+
+function unlockVault() {
+  const pin = document.getElementById('vault-pin-input')?.value.trim();
+  const storedHash = localStorage.getItem('ros_vault_pin') || btoa('1234');
+  if (btoa(pin) !== storedHash) {
+    showToast('❌ Incorrect PIN', 'error', 2500);
+    document.getElementById('vault-pin-input').value = '';
+    document.getElementById('vault-pin-input').classList.add('shake');
+    setTimeout(() => document.getElementById('vault-pin-input').classList.remove('shake'), 500);
+    return;
+  }
+  _vaultUnlocked = true;
+  document.getElementById('vault-locked-view').style.display = 'none';
+  document.getElementById('vault-unlocked-view').style.display = 'flex';
+
+  const c = contacts[currentIndex];
+  const key = `ros_vault_${c?.id}`;
+  const note = localStorage.getItem(key) || '';
+  document.getElementById('vault-note-input').value = atob(note || btoa(''));
+}
+
+function saveVaultNote() {
+  const c = contacts[currentIndex];
+  if (!c || !_vaultUnlocked) return;
+  const text = document.getElementById('vault-note-input')?.value || '';
+  localStorage.setItem(`ros_vault_${c.id}`, btoa(unescape(encodeURIComponent(text))));
+  showToast('🔐 Vault note saved securely!', 'success');
+}
+
+function setVaultPin() {
+  const newPin = prompt('Set a new vault PIN (4-8 digits):');
+  if (!newPin || newPin.length < 4) { showToast('PIN must be at least 4 digits', 'warn'); return; }
+  localStorage.setItem('ros_vault_pin', btoa(newPin));
+  showToast('🔐 Vault PIN updated!', 'success');
+}
+
+document.getElementById('btn-vault')?.addEventListener('click', openVaultModal);
+document.getElementById('btn-vault-unlock')?.addEventListener('click', unlockVault);
+document.getElementById('btn-vault-save')?.addEventListener('click', saveVaultNote);
+document.getElementById('btn-vault-set-pin')?.addEventListener('click', setVaultPin);
+document.getElementById('vault-pin-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') unlockVault();
+});
+document.getElementById('btn-close-vault')?.addEventListener('click', () => {
+  _vaultUnlocked = false;
+  document.getElementById('vault-overlay')?.classList.remove('active');
+});
+document.getElementById('vault-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('vault-overlay')) {
+    _vaultUnlocked = false;
+    document.getElementById('vault-overlay').classList.remove('active');
+  }
+});
+
+
+/* ================================================================
+   42. REACTION EMOJIS ON MESSAGES
+================================================================ */
+function addReactionToMessage(msgId, emoji, roomId) {
+  const key = `ros_reactions_${roomId}`;
+  const reactions = JSON.parse(localStorage.getItem(key) || '{}');
+  if (!reactions[msgId]) reactions[msgId] = {};
+  reactions[msgId][emoji] = (reactions[msgId][emoji] || 0) + 1;
+  localStorage.setItem(key, JSON.stringify(reactions));
+
+  if (db && isFirebaseLive) {
+    db.ref(`rooms/${roomId}/reactions/${msgId}/${emoji}`).transaction(v => (v || 0) + 1);
+  }
+
+  // Update UI
+  const msgEl = document.querySelector(`[data-msg-id="${msgId}"]`);
+  if (msgEl) {
+    let reactBar = msgEl.querySelector('.reaction-bar');
+    if (!reactBar) {
+      reactBar = document.createElement('div');
+      reactBar.className = 'reaction-bar';
+      msgEl.appendChild(reactBar);
+    }
+    renderReactionsOnBubble(msgId, roomId, reactBar);
+  }
+}
+
+function renderReactionsOnBubble(msgId, roomId, container) {
+  const key = `ros_reactions_${roomId}`;
+  const reactions = JSON.parse(localStorage.getItem(key) || '{}');
+  const msgReactions = reactions[msgId] || {};
+  container.innerHTML = Object.entries(msgReactions).map(([emoji, count]) =>
+    `<span class="reaction-pill">${emoji} ${count}</span>`
+  ).join('');
+}
+
+function showReactionPicker(msgId, roomId, anchorEl) {
+  // Remove any existing picker
+  document.querySelectorAll('.reaction-picker-popup').forEach(p => p.remove());
+
+  const picker = document.createElement('div');
+  picker.className = 'reaction-picker-popup';
+  const emojis = ['❤️','😂','😮','😢','🔥','👍','🙌','💯'];
+  picker.innerHTML = emojis.map(e => `<button class="react-emoji-btn" data-emoji="${e}">${e}</button>`).join('');
+  document.body.appendChild(picker);
+
+  const rect = anchorEl.getBoundingClientRect();
+  picker.style.cssText = `position:fixed;bottom:${window.innerHeight - rect.top + 6}px;left:${rect.left}px;z-index:99999`;
+
+  picker.querySelectorAll('.react-emoji-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      addReactionToMessage(msgId, btn.dataset.emoji, roomId);
+      picker.remove();
+      showToast(btn.dataset.emoji, 'success', 1200);
+    });
+  });
+
+  setTimeout(() => document.addEventListener('click', () => picker.remove(), { once: true }), 100);
+}
+
+// Wire long-press / right-click on chat messages to show reaction picker
+document.getElementById('chat-messages')?.addEventListener('contextmenu', e => {
+  const bubble = e.target.closest('[data-msg-id]');
+  if (!bubble) return;
+  e.preventDefault();
+  showReactionPicker(bubble.dataset.msgId, activeRoomId, bubble);
+});
+
+// Long press on mobile
+let _lpTimer = null;
+document.getElementById('chat-messages')?.addEventListener('touchstart', e => {
+  const bubble = e.target.closest('[data-msg-id]');
+  if (!bubble) return;
+  _lpTimer = setTimeout(() => {
+    showReactionPicker(bubble.dataset.msgId, activeRoomId, bubble);
+  }, 500);
+}, { passive: true });
+document.getElementById('chat-messages')?.addEventListener('touchend', () => {
+  clearTimeout(_lpTimer);
+}, { passive: true });
+
+
+/* ================================================================
+   43. INIT EXTENSIONS — hook new features into app startup
+================================================================ */
+function initNewFeatures() {
+  // Nudge check on startup (after 3s)
+  setTimeout(checkNudges, 3000);
+
+  // Milestone notifications check
+  setTimeout(checkMilestoneNotifications, 2000);
+  setInterval(checkMilestoneNotifications, 3600000); // every hour
+
+  // Capsule unlock check every minute
+  setInterval(() => {
+    const c = contacts[currentIndex];
+    if (c) {
+      const roomId = c.linkedUid ? makeRoomId(myUid, c.linkedUid) : `local_${c.id}`;
+      const key = `ros_capsules_${roomId}`;
+      const caps = JSON.parse(localStorage.getItem(key) || '[]');
+      caps.forEach(cap => {
+        if (!cap._unlockNotified && Date.now() >= cap.unlockDate) {
+          cap._unlockNotified = true;
+          localStorage.setItem(key, JSON.stringify(caps));
+          showToast(`🔓 A time capsule from ${cap.author || 'you'} is now open!`, 'info', 6000);
+        }
+      });
+    }
+  }, 60000);
+}
+
 init();
+initNewFeatures();

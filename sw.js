@@ -1,11 +1,11 @@
 /* ================================================================
-   RELATIONSHIP OS — Service Worker (sw.js) v2.0
-   Offline-first PWA with intelligent caching
+   RELATIONSHIP OS — Service Worker (sw.js) v3.0
+   Offline-first PWA with intelligent caching + auto-update
 ================================================================ */
 'use strict';
 
-const CACHE_NAME  = 'ros-shell-v9';
-const DATA_CACHE  = 'ros-data-v2';
+const CACHE_NAME  = 'ros-shell-v10';
+const DATA_CACHE  = 'ros-data-v3';
 
 const APP_SHELL = [
   './',
@@ -170,6 +170,9 @@ self.addEventListener('notificationclick', event => {
 });
 
 self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, body, tag } = event.data;
     event.waitUntil(
@@ -182,4 +185,3 @@ self.addEventListener('message', event => {
     );
   }
 });
-
