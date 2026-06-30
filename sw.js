@@ -4,8 +4,8 @@
 ================================================================ */
 'use strict';
 
-const CACHE_NAME  = 'ros-shell-v10';
-const DATA_CACHE  = 'ros-data-v3';
+const CACHE_NAME  = 'ros-shell-v11';
+const DATA_CACHE  = 'ros-data-v4';
 
 const APP_SHELL = [
   './',

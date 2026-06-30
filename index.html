@@ -251,16 +251,6 @@
             <span class="tile-caret">›</span>
           </div>
 
-          <!-- Note tile — clicking edits inline via JS makeEditable -->
-          <div class="info-tile note-tile">
-            <div class="tile-icon-badge tile-badge-blue">📝</div>
-            <div class="tile-body">
-              <span class="tile-tag">NOTE</span>
-              <p class="tile-content" id="card-note" title="Click to edit">No notes yet.</p>
-            </div>
-            <span class="tile-caret" style="opacity:.35">✏️</span>
-          </div>
-
           <!-- Reminder tile — clicking opens reminder/bell flow -->
           <div class="info-tile reminder-tile" id="reminder-tile" onclick="document.getElementById('btn-remind').click()" role="button" tabindex="0" title="Set reminder">
             <div class="tile-icon-badge tile-badge-amber">🔔</div>
@@ -324,9 +314,6 @@
           <button class="extra-feat-btn" id="btn-vault" title="Private Vault">
             <span>🔐</span><span>Vault</span>
           </button>
-          <button class="extra-feat-btn" id="btn-theme-picker" title="Contact Theme">
-            <span>🎨</span><span>Theme</span>
-          </button>
         </div>
 
         <button id="btn-memories" style="display:none" aria-hidden="true"></button>
@@ -335,7 +322,14 @@
 
       </div>
       <!-- /profile-card -->
+
+      <!-- ── CARD VERTICAL SWAP ARROWS ── -->
+      <div class="card-swap-vertical">
+        <button class="swap-arrow-btn swap-arrow-up" id="btn-card-up" title="Previous Contact (↑)" aria-label="Previous Contact">▲</button>
+        <button class="swap-arrow-btn swap-arrow-down" id="btn-card-down" title="Next Contact (↓)" aria-label="Next Contact">▼</button>
+      </div>
     </div>
+
     <!-- /card-stack-wrapper -->
 
   </div><!-- /page-wrapper -->
@@ -908,24 +902,6 @@
       <div class="modal-body">
         <p class="form-hint" style="margin-bottom:12px">Tap a template to load it into chat</p>
         <div id="templates-list"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ══════════════════════════════════════════════
-       THEME PICKER OVERLAY
-  ══════════════════════════════════════════════ -->
-  <div class="modal-overlay" id="theme-picker-overlay">
-    <div class="modal-card" style="max-width:340px">
-      <div class="modal-header-premium">
-        <h2 class="modal-title">🎨 Contact Theme</h2>
-        <button class="modal-close-x" id="btn-close-theme-picker" aria-label="Close">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <p class="form-hint" style="margin-bottom:16px">Pick an accent color for this contact's card</p>
-        <div class="theme-color-grid" id="theme-color-grid"></div>
       </div>
     </div>
   </div>

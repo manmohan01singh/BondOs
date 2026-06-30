@@ -222,7 +222,6 @@ const cardBirthday    = document.getElementById('card-birthday');
 const cardLastTalk    = document.getElementById('card-last-talk');
 const cardCategory    = document.getElementById('card-category');
 const cardMemory      = document.getElementById('card-memory');
-const cardNote        = document.getElementById('card-note');
 const cardReminder    = document.getElementById('card-reminder');
 const onlineDot       = document.getElementById('online-dot');
 const friendStatusText = document.getElementById('friend-status-text');
@@ -570,7 +569,6 @@ function renderCard(contact) {
     cardLastTalk.textContent = '—';
     cardCategory.textContent = '—';
     cardMemory.textContent   = 'Add your first contact with the + button';
-    cardNote.textContent     = '';
     cardReminder.textContent = '';
     scoreNumber.textContent  = '—';
     scoreBarFill.style.width = '0%';
@@ -610,7 +608,6 @@ function renderCard(contact) {
   cardLastTalk.textContent = contact.lastTalk || '—';
   cardCategory.textContent = contact.category || '—';
   cardMemory.textContent   = contact.memory   || 'No memory added yet.';
-  cardNote.textContent     = contact.note     || 'No notes yet.';
   cardReminder.textContent = contact.reminder || 'No reminder set.';
 
   // ── Score (health algorithm) ──
@@ -648,7 +645,6 @@ function renderCard(contact) {
 
   // ── Hook new features ──
   updateStreakBadge(contact);
-  applyContactTheme(contact);
   renderMoodGraph(contact);
 
   // Update chat drawer avatar color if open
@@ -1749,7 +1745,6 @@ const editableFields = [
   { el: cardName,     field: 'name'     },
   { el: cardCity,     field: 'city'     },
   { el: cardMemory,   field: 'memory'   },
-  { el: cardNote,     field: 'note'     },
   { el: cardReminder, field: 'reminder' },
   { el: cardBirthday, field: 'birthday' },
 ];
@@ -1774,12 +1769,6 @@ if (cardCategory) {
   });
 }
 
-// Note tile click event triggers note edit
-document.querySelector('.note-tile')?.addEventListener('click', (e) => {
-  if (e.target !== cardNote && cardNote) {
-    cardNote.click();
-  }
-});
 
 
 /* ================================================================
@@ -4852,17 +4841,7 @@ document.addEventListener('keydown', e => {
 
 
 // ── Touch / swipe on the card ──
-let touchStartY = 0;
-profileCard.addEventListener('touchstart', e => {
-  touchStartY = e.changedTouches[0].clientY;
-}, { passive: true });
 
-profileCard.addEventListener('touchend', e => {
-  const deltaY = e.changedTouches[0].clientY - touchStartY;
-  if (Math.abs(deltaY) > 45) {
-    deltaY < 0 ? navigate('next') : navigate('prev');
-  }
-}, { passive: true });
 
 
 /* ================================================================
@@ -5517,54 +5496,8 @@ document.getElementById('nudge-dismiss')?.addEventListener('click', function(e) 
 /* ================================================================
    38. CONTACT THEMES
 ================================================================ */
-function applyContactTheme(contact) {
-  const root = document.documentElement;
-  const color = contact?.themeColor || accentColor || '#f97316';
-  root.style.setProperty('--contact-accent', color);
-  const card = document.getElementById('profile-card');
-  if (card) {
-    // Compute a light version
-    card.style.setProperty('--card-accent', color);
-  }
-}
-
-function openThemePicker(contact) {
-  const overlay = document.getElementById('theme-picker-overlay');
-  if (!overlay) return;
-  overlay.classList.add('active');
-
-  const colors = ['#f97316','#3b82f6','#10b981','#a855f7','#ec4899','#eab308','#ef4444','#06b6d4','#84cc16','#f43f5e'];
-  const grid = document.getElementById('theme-color-grid');
-  if (!grid) return;
-  grid.innerHTML = colors.map(col => `
-    <button class="theme-color-swatch ${(contact?.themeColor === col) ? 'active' : ''}" 
-            style="background:${col}" data-color="${col}"></button>
-  `).join('');
-
-  grid.querySelectorAll('.theme-color-swatch').forEach(swatch => {
-    swatch.addEventListener('click', () => {
-      const c = contacts[currentIndex];
-      if (!c) return;
-      c.themeColor = swatch.dataset.color;
-      applyContactTheme(c);
-      saveContacts();
-      grid.querySelectorAll('.theme-color-swatch').forEach(s => s.classList.remove('active'));
-      swatch.classList.add('active');
-      showToast('🎨 Theme applied!', 'success', 2000);
-    });
-  });
-}
-
-document.getElementById('btn-theme-picker')?.addEventListener('click', () => {
-  openThemePicker(contacts[currentIndex]);
-});
-document.getElementById('btn-close-theme-picker')?.addEventListener('click', () => {
-  document.getElementById('theme-picker-overlay')?.classList.remove('active');
-});
-document.getElementById('theme-picker-overlay')?.addEventListener('click', e => {
-  if (e.target === document.getElementById('theme-picker-overlay'))
-    document.getElementById('theme-picker-overlay').classList.remove('active');
-});
+document.getElementById('btn-card-up')?.addEventListener('click', () => navigate('prev'));
+document.getElementById('btn-card-down')?.addEventListener('click', () => navigate('next'));
 
 
 /* ================================================================
