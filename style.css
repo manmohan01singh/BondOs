@@ -2127,6 +2127,11 @@ body::before {
     padding:80px 14px 100px;
   }
 
+  /* Hide Up/Down contact nav buttons on mobile (swipe/tap works better) */
+  #btn-up, #btn-down {
+    display: none !important;
+  }
+
   .left-sidebar {
     flex-direction:row; border-radius:var(--r-pill);
     padding:9px 12px; gap:7px;
@@ -2135,8 +2140,16 @@ body::before {
     background:rgba(255,255,255,.88); backdrop-filter:blur(18px);
     box-shadow:0 8px 30px rgba(0,0,0,.14), -2px -2px 10px rgba(255,255,255,.9);
     order:2;
+    max-width: 95%;
+    width: auto;
+    justify-content: center;
   }
   .sidebar-divider { width:1px; height:24px; }
+
+  /* Lift nudge banner above the floating bottom menu */
+  .nudge-banner {
+    bottom: 96px !important;
+  }
 
   .color-swatches { flex-direction:row; order:3; margin-bottom:80px; }
 
@@ -2596,4 +2609,44 @@ body::before {
 }
 .mood-graph-day { font-size: 9px; color: var(--ink-4); font-weight: 600; }
 .mood-graph-empty { font-size: 12px; color: var(--ink-3); text-align: center; }
+
+/* ── Narrow Mobile Screens (e.g. iPhone SE) ── */
+@media (max-width:380px) {
+  .left-sidebar {
+    gap: 4px !important;
+    padding: 6px 8px !important;
+    width: 94% !important;
+    bottom: 12px !important;
+  }
+  .nav-btn {
+    width: 32px !important;
+    height: 32px !important;
+  }
+  .nav-btn svg {
+    width: 15px !important;
+    height: 15px !important;
+  }
+  .sidebar-divider {
+    height: 18px !important;
+  }
+  .profile-card {
+    max-width: 310px !important;
+  }
+  .card-stack-wrapper {
+    max-width: 310px !important;
+  }
+  .action-icon-toy {
+    width: 32px !important;
+    height: 32px !important;
+    font-size: 15px !important;
+  }
+  .extra-feat-btn {
+    min-width: 58px !important;
+    padding: 6px 8px !important;
+  }
+  .extra-features-row {
+    gap: 4px !important;
+  }
+}
+
 
