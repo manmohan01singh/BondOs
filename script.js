@@ -162,6 +162,7 @@ let audioChunks   = [];
 let isRecording   = false;
 let recordingStream = null;
 let recordingTimer  = null;
+let recordingStartTime = 0;
 const MAX_VOICE_MS    = 60000;
 const MAX_VOICE_BYTES = 400000;
 
@@ -1332,43 +1333,60 @@ function handleMessage() {
 function handleReminder() {
   const c = contacts[currentIndex];
   if (!c) return;
-  
-  const reminderText = prompt(`⏰ Set reminder label for ${c.name}:`, c.reminder || '');
-  if (reminderText === null) return;
-  
-  const autoSendText = prompt(`💬 [Auto-Send message at reminder time]\nEnter message to send automatically (leave blank to only show notification):`);
-  if (autoSendText === null) return;
-  
-  const delayStr = prompt(`📅 Trigger delay in minutes (e.g. 5) or specific time (e.g. 18:30):`, "5");
-  if (delayStr === null) return;
+  // Open the custom CSS reminder modal instead of native prompts
+  const overlay = document.getElementById('reminder-modal-overlay');
+  if (!overlay) return;
+  // Pre-fill existing reminder text
+  const labelEl = document.getElementById('input-reminder-label');
+  const autoEl  = document.getElementById('input-reminder-auto-send');
+  const delayEl = document.getElementById('input-reminder-delay');
+  if (labelEl) labelEl.value = (c.reminder && c.reminder !== 'No reminder set.') ? c.reminder : '';
+  if (autoEl)  autoEl.value  = '';
+  if (delayEl) delayEl.value = '5';
+  overlay.classList.add('active');
+  if (window._navStack) window._navStack.push('reminder-modal-overlay');
+  history.pushState({ modal: 'reminder-modal-overlay' }, '');
+}
+
+function _applyReminderFromModal() {
+  const c = contacts[currentIndex];
+  if (!c) return;
+  const overlay  = document.getElementById('reminder-modal-overlay');
+  const labelEl  = document.getElementById('input-reminder-label');
+  const autoEl   = document.getElementById('input-reminder-auto-send');
+  const delayEl  = document.getElementById('input-reminder-delay');
+
+  const reminderText  = (labelEl && labelEl.value.trim()) || '';
+  const autoSendText  = (autoEl  && autoEl.value.trim())  || '';
+  const delayStr      = (delayEl && delayEl.value.trim()) || '5';
+
+  if (!reminderText) {
+    showToast('Please enter a reminder label', 'warn', 2000);
+    return;
+  }
 
   let triggerAt = 0;
   if (delayStr.includes(':')) {
     const [h, m] = delayStr.split(':').map(Number);
     const d = new Date();
     d.setHours(h, m, 0, 0);
-    if (d.getTime() < Date.now()) {
-      d.setDate(d.getDate() + 1); // tomorrow
-    }
+    if (d.getTime() < Date.now()) d.setDate(d.getDate() + 1);
     triggerAt = d.getTime();
   } else {
     const mins = parseFloat(delayStr) || 5;
     triggerAt = Date.now() + mins * 60 * 1000;
   }
 
-  c.reminder = reminderText.trim() || 'No reminder set.';
-  cardReminder.textContent = c.reminder;
+  c.reminder = reminderText || 'No reminder set.';
+  if (cardReminder) cardReminder.textContent = c.reminder;
 
-  if (autoSendText.trim()) {
-    c.scheduledMessage = {
-      text: autoSendText.trim(),
-      triggerAt: triggerAt,
-      sent: false
-    };
+  if (autoSendText) {
+    c.scheduledMessage = { text: autoSendText, triggerAt, sent: false };
     const timeStr = new Date(triggerAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    showToast(`📅 Message scheduled for ${timeStr}!`, 'success');
+    showToast(`📅 Reminder & message scheduled for ${timeStr}!`, 'success');
   } else {
     c.scheduledMessage = null;
+    showToast(`⏰ Reminder set!`, 'success');
   }
 
   saveContacts();
@@ -1377,12 +1395,16 @@ function handleReminder() {
     Notification.requestPermission().then(perm => {
       if (perm === 'granted') {
         new Notification('⏰ Relationship OS', {
-          body: `Reminder scheduled for ${c.name}: "${c.reminder}"`,
-          icon: '📇'
+          body: `Reminder set for ${c.name}: "${c.reminder}"`,
+          icon: './icon-192.png'
         });
       }
     });
   }
+
+  // Close modal
+  if (overlay) overlay.classList.remove('active');
+  if (history.state && history.state.modal === 'reminder-modal-overlay') history.back();
 }
 
 function sendScheduledMessage(contact, text) {
@@ -1518,6 +1540,9 @@ async function sendVoiceChatMessage(blob) {
   }
 
   const receiverId = isLocal ? '' : roomId.replace(myUid, '').replace('__', '');
+  // Calculate recording duration from stored start time
+  const voiceDuration = recordingStartTime > 0 ? Math.round((now - recordingStartTime) / 1000) : 0;
+  recordingStartTime = 0;
   const msg = {
     id:         now.toString(),
     sender:     myUid,
@@ -1525,6 +1550,7 @@ async function sendVoiceChatMessage(blob) {
     receiverId,
     type:       'voice',
     audio:      audioData,
+    duration:   voiceDuration,
     text:       '🎤 Voice message',
     timestamp:  now,
     read:       false,
@@ -1595,6 +1621,7 @@ async function toggleVoiceMemo() {
 
     mediaRecorder.start();
     isRecording = true;
+    recordingStartTime = Date.now();
     setVoiceRecordingUI(true);
 
     recordingTimer = setTimeout(() => {
@@ -2447,7 +2474,7 @@ function hexToRGBA(hex, alpha) {
 }
 
 function formatAudioTime(secs) {
-  if (isNaN(secs)) return '0:00';
+  if (!secs || isNaN(secs) || !isFinite(secs) || secs < 0) return '0:00';
   const m = Math.floor(secs / 60);
   const s = Math.floor(secs % 60);
   return `${m}:${s < 10 ? '0' : ''}${s}`;
@@ -2500,7 +2527,7 @@ function openChatDrawer(contact) {
 
   chatOverlay.classList.add('active');
   document.body.style.overflow = 'hidden';
-  setTimeout(() => chatInputField.focus(), 200);
+  // No autofocus — prevents keyboard auto-opening on mobile PWA (disrupts UX)
 
   // Update last talk
   contact.lastTalk = 'Just now';
@@ -2745,8 +2772,21 @@ function appendChatMessage(msg) {
     playerDiv.appendChild(waveformWrapper);
     bubble.appendChild(playerDiv);
     
+    // Show duration from stored payload immediately, then update from metadata
+    if (msg.duration && msg.duration > 0) {
+      durTime.textContent = formatAudioTime(msg.duration);
+    }
     audio.addEventListener('loadedmetadata', () => {
-      durTime.textContent = formatAudioTime(audio.duration);
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        durTime.textContent = formatAudioTime(audio.duration);
+      } else if (msg.duration && msg.duration > 0) {
+        durTime.textContent = formatAudioTime(msg.duration);
+      }
+    });
+    audio.addEventListener('durationchange', () => {
+      if (isFinite(audio.duration) && audio.duration > 0) {
+        durTime.textContent = formatAudioTime(audio.duration);
+      }
     });
     
     audio.addEventListener('timeupdate', () => {
@@ -3064,8 +3104,8 @@ function initLeafletMap(contact) {
     maxZoom: 20
   }).addTo(leafletMapInstance);
 
-  // Handle map manual panning to turn off Follow Mode
-  leafletMapInstance.on('movestart', () => {
+  // Handle map manual DRAG to turn off Follow Mode (dragstart won't fire on programmatic panTo)
+  leafletMapInstance.on('dragstart', () => {
     if (isFollowingFriend) {
       setFollowMode(false);
     }
@@ -3397,7 +3437,10 @@ async function startSharingLocation() {
     };
 
     if (db && isFirebaseLive) {
-      await db.ref(`rooms/${roomId}/location/${myUid}`).set(payload);
+      const locRef = db.ref(`rooms/${roomId}/location/${myUid}`);
+      // Set onDisconnect so Firebase auto-clears sharing flag if the app goes offline
+      locRef.onDisconnect().set({ sharing: false, updatedAt: Date.now() });
+      await locRef.set(payload);
     } else {
       localStorage.setItem(`ros_location_${roomId}_my`, JSON.stringify(payload));
     }
@@ -3497,7 +3540,10 @@ function stopSharingLocation() {
 
   const payload = { sharing: false, updatedAt: Date.now() };
   if (db && isFirebaseLive && c.linkedUid) {
-    db.ref(`rooms/${roomId}/location/${myUid}`).set(payload).catch(console.error);
+    const locRef = db.ref(`rooms/${roomId}/location/${myUid}`);
+    // Cancel the onDisconnect handler so it doesn't fire again, then write stopped state
+    locRef.onDisconnect().cancel();
+    locRef.set(payload).catch(console.error);
   } else {
     localStorage.setItem(`ros_location_${roomId}_my`, JSON.stringify(payload));
   }
@@ -4503,6 +4549,25 @@ btnRemind.addEventListener('click',   handleReminder);
 btnVoice.addEventListener('click',    toggleVoiceMemo);
 document.getElementById('btn-call-contact').addEventListener('click', handleCall);
 
+// ── Reminder modal ──
+document.getElementById('btn-save-reminder')?.addEventListener('click', _applyReminderFromModal);
+document.getElementById('btn-cancel-reminder')?.addEventListener('click', () => {
+  const overlay = document.getElementById('reminder-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+  if (history.state && history.state.modal === 'reminder-modal-overlay') history.back();
+});
+document.getElementById('btn-close-reminder-modal-x')?.addEventListener('click', () => {
+  const overlay = document.getElementById('reminder-modal-overlay');
+  if (overlay) overlay.classList.remove('active');
+  if (history.state && history.state.modal === 'reminder-modal-overlay') history.back();
+});
+document.getElementById('reminder-modal-overlay')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('reminder-modal-overlay')) {
+    document.getElementById('reminder-modal-overlay').classList.remove('active');
+    if (history.state && history.state.modal === 'reminder-modal-overlay') history.back();
+  }
+});
+
 // Walkie-Talkie events
 if (btnWalkie) {
   btnWalkie.addEventListener('mousedown',  startWalkieTalkie);
@@ -4657,22 +4722,79 @@ document.getElementById('btn-export-storybook')?.addEventListener('click', () =>
   showToast('📖 Storybook page exported as text file!', 'success');
 });
 
+/* ================================================================
+   History / Back-Button Navigation Stack
+   Pushes a state every time a modal opens so the browser back button
+   closes the modal instead of exiting the PWA.
+================================================================ */
+window._navStack = [];
+
+function _pushModalState(modalId) {
+  window._navStack.push(modalId);
+  history.pushState({ modal: modalId }, '');
+}
+
+function _closeActiveModal() {
+  const profileModal  = document.getElementById('profile-modal-overlay');
+  const timelineModal = document.getElementById('timeline-modal-overlay');
+  const reminderModal = document.getElementById('reminder-modal-overlay');
+  const allModals = [
+    { el: chatOverlay,           close: closeChatDrawer },
+    { el: locationModalOverlay,  close: closeLocationModal },
+    { el: memoriesModalOverlay,  close: closeMemoriesModal },
+    { el: connectModalOverlay,   close: closeConnectModal },
+    { el: profileModal,          close: closeProfileModal },
+    { el: timelineModal,         close: closeTimelineModal },
+    { el: reminderModal,         close: () => reminderModal && reminderModal.classList.remove('active') }
+  ];
+  for (const { el, close } of allModals) {
+    if (el && el.classList.contains('active')) { close(); return true; }
+  }
+  return false;
+}
+
+window.addEventListener('popstate', (e) => {
+  // If a modal is open, close it; this prevents the app from navigating away
+  const closed = _closeActiveModal();
+  if (!closed) {
+    // No modal was open — push a blank state to keep the app alive
+    history.pushState({}, '');
+  }
+});
+
+// Push an initial state so the very first back press hits popstate
+if (history.state === null) {
+  history.pushState({ root: true }, '');
+}
+
+// Patch modal open functions to also push history state
+const _origOpenChat      = openChatDrawer;
+openChatDrawer = function(contact) { _origOpenChat(contact); history.pushState({ modal: 'chat-overlay' }, ''); };
+const _origOpenLocation  = openLocationModal;
+openLocationModal = function() { _origOpenLocation(); history.pushState({ modal: 'location-modal-overlay' }, ''); };
+const _origOpenMemories  = openMemoriesModal;
+openMemoriesModal = function() { _origOpenMemories(); history.pushState({ modal: 'memories-modal-overlay' }, ''); };
+const _origOpenConnect   = openConnectModal;
+openConnectModal = function() { _origOpenConnect(); history.pushState({ modal: 'connect-modal-overlay' }, ''); };
+const _origOpenProfile   = openProfileModal;
+openProfileModal = function() { _origOpenProfile(); history.pushState({ modal: 'profile-modal-overlay' }, ''); };
+const _origOpenTimeline  = openTimelineModal;
+openTimelineModal = function() { _origOpenTimeline(); history.pushState({ modal: 'timeline-modal-overlay' }, ''); };
+
 // ── Keyboard shortcuts ──
 document.addEventListener('keydown', e => {
-  // Inside any modal
-  const profileModal = document.getElementById('profile-modal-overlay');
+  const profileModal  = document.getElementById('profile-modal-overlay');
   const timelineModal = document.getElementById('timeline-modal-overlay');
-  const anyModalOpen = [profileModal, connectModalOverlay, locationModalOverlay, memoriesModalOverlay, timelineModal]
+  const reminderModal = document.getElementById('reminder-modal-overlay');
+  const anyModalOpen  = [profileModal, connectModalOverlay, locationModalOverlay,
+                         memoriesModalOverlay, timelineModal, reminderModal]
     .some(m => m && m.classList.contains('active'));
   const chatOpen = chatOverlay.classList.contains('active');
 
   if (e.key === 'Escape') {
-    if (chatOpen) { closeChatDrawer(); return; }
-    if (anyModalOpen) {
-      [profileModal, connectModalOverlay, locationModalOverlay, memoriesModalOverlay, timelineModal]
-        .forEach(m => m && m.classList.remove('active'));
-      return;
-    }
+    const closed = _closeActiveModal();
+    if (closed && history.state && history.state.modal) history.back();
+    return;
   }
 
   if (anyModalOpen || chatOpen) {
@@ -4723,32 +4845,74 @@ function triggerPushNotification(title, body, tag) {
 }
 
 /* ================================================================
-   31c. WALKIE-TALKIE — Push-to-Talk
+   31c. WALKIE-TALKIE — Push-to-Talk (WebRTC with corrected signalling paths)
+   Signalling structure:
+     walkie_signal/{receiverUid}/{senderUid}/offer          ← sender writes offer
+     walkie_signal/{receiverUid}/{senderUid}/offerCandidates ← sender writes ICE candidates
+     walkie_signal/{receiverUid}/{senderUid}/answer         ← receiver writes answer
+     walkie_signal/{receiverUid}/{senderUid}/answerCandidates ← receiver writes ICE candidates
 ================================================================ */
 async function startWalkieTalkie() {
   var c = contacts[currentIndex];
   if (!c || !c.linkedUid) { showToast('Link this contact to use Walkie-Talkie', 'error'); return; }
   if (!db || !isFirebaseLive) { showToast('Walkie-Talkie needs Firebase connection', 'warn'); return; }
+  if (walkieActive) return; // already active
   try {
     walkieStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-  } catch (err) { showToast('Microphone access denied', 'error'); return; }
+  } catch (err) { showToast('Microphone access denied — check browser permissions', 'error'); return; }
+
   walkieActive = true;
   if (btnWalkie) btnWalkie.classList.add('walkie-active');
-  showToast('Broadcasting... release to stop', 'info', 2000);
-  db.ref('walkie/' + c.linkedUid + '/from_' + myUid).set({ active: true, ts: Date.now() });
-  walkie_pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+  showToast('🎙️ Broadcasting... release to stop', 'info', 2000);
+
+  var sigBase = 'walkie_signal/' + c.linkedUid + '/' + myUid;
+
+  // Clean up any stale signalling data first
+  await db.ref(sigBase).remove();
+
+  walkie_pc = new RTCPeerConnection({
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  });
+
   walkieStream.getTracks().forEach(function(t) { walkie_pc.addTrack(t, walkieStream); });
-  walkie_pc.onicecandidate = function(e) {
-    if (e.candidate) db.ref('walkie_signal/' + c.linkedUid + '/' + myUid + '/candidates').push(e.candidate.toJSON());
+
+  walkie_pc.onicecandidate = function(ev) {
+    if (ev.candidate) {
+      db.ref(sigBase + '/offerCandidates').push(ev.candidate.toJSON());
+    }
   };
+
   var offer = await walkie_pc.createOffer();
   await walkie_pc.setLocalDescription(offer);
-  db.ref('walkie_signal/' + c.linkedUid + '/' + myUid + '/offer').set({ sdp: offer.sdp, type: offer.type });
-  walkieSendRef = db.ref('walkie_signal/' + myUid + '/' + c.linkedUid + '/answer');
-  walkieSendRef.once('value', function(snap) {
+  await db.ref(sigBase + '/offer').set({ sdp: offer.sdp, type: offer.type });
+
+  // Listen for answer
+  walkieSendRef = db.ref(sigBase + '/answer');
+  walkieSendRef.on('value', async function(snap) {
     var ans = snap.val();
-    if (ans && walkie_pc) walkie_pc.setRemoteDescription(new RTCSessionDescription(ans)).catch(function(){});
+    if (ans && walkie_pc && walkie_pc.currentRemoteDescription === null) {
+      try {
+        await walkie_pc.setRemoteDescription(new RTCSessionDescription(ans));
+      } catch(e) { console.warn('Walkie answer error:', e); }
+    }
   });
+
+  // Listen for receiver's ICE candidates
+  walkieRecvRef = db.ref(sigBase + '/answerCandidates');
+  walkieRecvRef.on('child_added', async function(cs) {
+    var cand = cs.val();
+    if (cand && walkie_pc) {
+      try {
+        await walkie_pc.addIceCandidate(new RTCIceCandidate(cand));
+      } catch(e) {}
+    }
+  });
+
+  // Mark as active for the receiver to detect
+  db.ref('walkie/' + c.linkedUid + '/from_' + myUid).set({ active: true, ts: Date.now() });
 }
 
 function stopWalkieTalkie() {
@@ -4758,10 +4922,12 @@ function stopWalkieTalkie() {
   if (walkieStream) { walkieStream.getTracks().forEach(function(t) { t.stop(); }); walkieStream = null; }
   if (walkie_pc) { walkie_pc.close(); walkie_pc = null; }
   if (walkieSendRef) { walkieSendRef.off(); walkieSendRef = null; }
+  if (walkieRecvRef) { walkieRecvRef.off(); walkieRecvRef = null; }
   var c = contacts[currentIndex];
   if (c && c.linkedUid && db && isFirebaseLive) {
+    var sigBase = 'walkie_signal/' + c.linkedUid + '/' + myUid;
     db.ref('walkie/' + c.linkedUid + '/from_' + myUid).remove();
-    db.ref('walkie_signal/' + c.linkedUid + '/' + myUid).remove();
+    db.ref(sigBase).remove();
   }
   showToast('Walkie-Talkie off', 'info', 1500);
 }
@@ -4772,36 +4938,66 @@ function listenForWalkieTalkie() {
     var data = snap.val();
     if (!data || !data.active) return;
     var fromUid = snap.key.replace('from_', '');
-    var senderName = (contacts.find(function(c) { return c.linkedUid === fromUid; }) || {}).name || 'Friend';
-    showToast(senderName + ' is talking... open app to listen', 'info', 3000);
+    var senderName = (contacts.find(function(ct) { return ct.linkedUid === fromUid; }) || {}).name || 'Friend';
+    showToast('🎙️ ' + senderName + ' is talking!', 'info', 3000);
     triggerPushNotification(senderName + ' is on Walkie-Talkie', 'Open app to listen', 'walkie');
-    var recv_pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-    recv_pc.ontrack = function(e) {
+
+    var sigBase = 'walkie_signal/' + myUid + '/' + fromUid;
+
+    var recv_pc = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ]
+    });
+
+    recv_pc.ontrack = function(ev) {
       if (!walkieAudioElem) {
         walkieAudioElem = document.createElement('audio');
         walkieAudioElem.autoplay = true;
         walkieAudioElem.style.display = 'none';
         document.body.appendChild(walkieAudioElem);
       }
-      walkieAudioElem.srcObject = e.streams[0];
+      walkieAudioElem.srcObject = ev.streams[0];
     };
-    recv_pc.onicecandidate = function(e) {
-      if (e.candidate) db.ref('walkie_signal/' + myUid + '/' + fromUid + '/candidates').push(e.candidate.toJSON());
+
+    recv_pc.onicecandidate = function(ev) {
+      if (ev.candidate) {
+        db.ref(sigBase + '/answerCandidates').push(ev.candidate.toJSON());
+      }
     };
-    var offerSnap = await db.ref('walkie_signal/' + myUid + '/' + fromUid + '/offer').once('value');
-    var offerData = offerSnap.val();
-    if (!offerData) return;
+
+    // Wait for offer to appear (poll with a short retry)
+    var offerData = null;
+    for (var attempt = 0; attempt < 15 && !offerData; attempt++) {
+      var offerSnap = await db.ref(sigBase + '/offer').once('value');
+      offerData = offerSnap.val();
+      if (!offerData) await new Promise(r => setTimeout(r, 400));
+    }
+    if (!offerData) { console.warn('Walkie: no offer received'); recv_pc.close(); return; }
+
     await recv_pc.setRemoteDescription(new RTCSessionDescription(offerData));
     var answer = await recv_pc.createAnswer();
     await recv_pc.setLocalDescription(answer);
-    db.ref('walkie_signal/' + fromUid + '/' + myUid + '/answer').set({ sdp: answer.sdp, type: answer.type });
-    db.ref('walkie_signal/' + myUid + '/' + fromUid + '/candidates').on('child_added', function(cs) {
+    await db.ref(sigBase + '/answer').set({ sdp: answer.sdp, type: answer.type });
+
+    // Apply sender's ICE candidates
+    db.ref(sigBase + '/offerCandidates').on('child_added', async function(cs) {
       var cand = cs.val();
-      if (cand) recv_pc.addIceCandidate(new RTCIceCandidate(cand)).catch(function(){});
+      if (cand) {
+        try { await recv_pc.addIceCandidate(new RTCIceCandidate(cand)); } catch(e) {}
+      }
     });
-    db.ref('walkie/' + myUid).on('child_removed', function() {
-      recv_pc.close();
-      if (walkieAudioElem) walkieAudioElem.srcObject = null;
+
+    // Clean up when sender stops
+    db.ref('walkie/' + myUid + '/' + snap.key).on('value', function(sv) {
+      if (!sv.val() || !sv.val().active) {
+        recv_pc.close();
+        db.ref(sigBase + '/offerCandidates').off();
+        if (walkieAudioElem) { walkieAudioElem.srcObject = null; }
+        db.ref('walkie/' + myUid + '/' + snap.key).off();
+        showToast('🔇 ' + senderName + ' stopped broadcasting', 'info', 2000);
+      }
     });
   });
 }
@@ -4884,7 +5080,8 @@ async function init() {
     if (!isFirebaseLive) broadcastPresence(); // demo mode only
   }, 60000);
 
-  // 8.1. Scheduled messages background checker
+  // 8.1. Scheduled messages background checker — run immediately and then every 5s
+  checkScheduledMessages();
   setInterval(checkScheduledMessages, 5000);
 
   // 9. PWA install prompt
