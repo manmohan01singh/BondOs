@@ -1,0 +1,37 @@
+{
+  "name": "Relationship OS",
+  "short_name": "RelOS",
+  "description": "Your personal relationship management system — connect, track, and nurture your most important relationships in real time.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ebebeb",
+  "theme_color": "#f97316",
+  "orientation": "portrait-primary",
+  "lang": "en-US",
+  "dir": "ltr",
+  "categories": ["lifestyle", "productivity", "social"],
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Contact",
+      "short_name": "Add",
+      "description": "Add a new contact",
+      "url": "./?action=new",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

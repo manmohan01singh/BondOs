@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>BondOS — Relationship OS</title>
+  <meta name="description" content="Your personal relationship management system — connect, track, and nurture your most important relationships in real time." />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#F2EFEB" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="BondOS" />
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- TOAST -->
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
+
+  <!-- PWA Install -->
+  <button id="pwa-install-btn" aria-label="Install BondOS as an app">📥 Install App</button>
+
+  <!-- ── YOUR CODE PILL ── -->
+  <div class="my-code-pill" id="my-code-pill" title="Your connect code">
+    <span class="my-code-label">YOUR CODE</span>
+    <span class="my-code-value" id="my-code-value">——————</span>
+    <button class="my-code-copy" id="my-code-copy-btn" title="Copy code" aria-label="Copy code">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="9" y="9" width="13" height="13" rx="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ── APP LOGO ── -->
+  <a href="./" class="app-brand" aria-label="BondOS">
+    <img src="image.png?v=7" alt="BondOS" class="app-logo" width="72" height="72" />
+  </a>
+
+  <!-- ════════════════════════════════════════════
+       PAGE WRAPPER
+  ═════════════════════════════════════════════ -->
+  <div class="page-wrapper">
+
+    <!-- ── SIDEBAR NAV ── -->
+    <nav class="left-sidebar" aria-label="Navigation">
+
+      <button class="nav-btn nav-btn-home nav-btn-active" title="Home" aria-label="Home">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+          <polyline points="9 22 9 12 15 12 15 22"/>
+        </svg>
+      </button>
+
+      <!-- Add Contact -->
+      <button class="nav-btn nav-btn-add" id="btn-add" title="Add Contact (N)" aria-label="Add Contact">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+
+      <!-- Previous contact -->
+      <button class="nav-btn" id="btn-up" title="Previous contact (↑)" aria-label="Previous contact">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="18 15 12 9 6 15"/>
+        </svg>
+      </button>
+
+      <!-- Next contact -->
+      <button class="nav-btn" id="btn-down" title="Next contact (↓)" aria-label="Next contact">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      <!-- Timeline -->
+      <button class="nav-btn" id="btn-timeline" title="Bond Timeline" aria-label="Timeline">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 7 12 12 16 14"/>
+        </svg>
+      </button>
+
+      <!-- Reminder / notes -->
+      <button class="nav-btn" id="btn-remind" title="Set Reminder" aria-label="Set Reminder">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+          <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+        </svg>
+      </button>
+
+      <div class="sidebar-divider"></div>
+
+      <!-- My Profile (accent orange) -->
+      <button class="nav-btn nav-btn-profile" id="btn-profile" title="My Profile (P)" aria-label="My Profile">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      </button>
+
+      <!-- Connect (teal accent) -->
+      <button class="nav-btn nav-btn-connect" id="btn-connect" title="Connect (C)" aria-label="Connect">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+      </button>
+
+    </nav>
+
+    <!-- ── CARD STACK ── -->
+    <div class="card-stack-wrapper">
+      <div class="card-back card-back-2" id="card-back-2"></div>
+      <div class="card-back card-back-1" id="card-back-1"></div>
+
+      <!-- ════ FRONT PROFILE CARD ════ -->
+      <div class="profile-card" id="profile-card">
+
+        <!-- ── CARD HEADER ── -->
+        <div class="card-header">
+          <div class="avatar-wrapper">
+            <div class="card-avatar" id="card-avatar">
+              <svg viewBox="0 0 24 24" fill="rgba(255,255,255,0.75)">
+                <path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5z"/>
+              </svg>
+            </div>
+            <span class="online-dot" id="online-dot"></span>
+          </div>
+
+          <div class="card-title-group">
+            <h2 class="card-name" id="card-name" title="Click to edit">Add a Contact</h2>
+            <div class="card-sub">
+              <span class="card-city" id="card-city" title="Click to edit">📍 Tap to connect</span>
+              <span class="card-mood" id="card-mood">😊</span>
+            </div>
+            <div class="friend-status-text" id="friend-status-text"></div>
+          </div>
+
+          <div class="card-header-actions">
+            <button class="btn-favorite" id="btn-favorite" title="Favourite (F)" aria-label="Favourite">☆</button>
+            <button class="btn-delete-card" id="btn-delete-card" title="Delete contact" aria-label="Delete">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+                <path d="M9 6V4h6v2"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── ALERT BANNERS (shown conditionally by JS) ── -->
+        <div class="birthday-banner" id="birthday-banner" style="display:none"></div>
+        <div class="location-share-banner" id="location-share-banner" style="display:none"></div>
+        <div class="voice-recording-banner" id="voice-recording-banner" style="display:none">
+          <span class="voice-rec-dot"></span>
+          <span>Recording… tap mic again to stop &amp; send</span>
+        </div>
+
+        <!-- ── INTERACTION SCORE ── -->
+        <div class="score-section">
+          <div class="score-header">
+            <span class="score-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:middle;margin-right:5px;opacity:.7">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              Bond Strength
+            </span>
+            <div class="score-right">
+              <span class="score-number" id="score-number">—</span>
+              <span class="score-grade" id="score-grade">—</span>
+            </div>
+          </div>
+          <div class="score-bar-track">
+            <div class="score-bar-fill" id="score-bar-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- ── LIVE MOOD BROADCAST BAR ── -->
+        <div class="mood-selector-bar">
+          <span class="mood-bar-label">Broadcast Mood:</span>
+          <div class="mood-mini-picker" id="mood-mini-picker">
+            <button class="mood-mini-btn" data-mood="😊" title="Happy">😊</button>
+            <button class="mood-mini-btn" data-mood="🤔" title="Thinking">🤔</button>
+            <button class="mood-mini-btn" data-mood="😴" title="Tired">😴</button>
+            <button class="mood-mini-btn" data-mood="🔥" title="Productive">🔥</button>
+            <button class="mood-mini-btn" data-mood="😢" title="Sad">😢</button>
+          </div>
+        </div>
+
+        <!-- ── QUICK STATS: Birthday / Last Talk / Category ── -->
+        <div class="quick-info">
+          <div class="qi-item">
+            <div class="qi-icon-wrap qi-bday">🎂</div>
+            <div class="qi-meta">
+              <span class="qi-label">Birthday</span>
+              <span class="qi-value" id="card-birthday" title="Click to edit">—</span>
+            </div>
+          </div>
+          <div class="qi-sep"></div>
+          <div class="qi-item">
+            <div class="qi-icon-wrap qi-talk">💬</div>
+            <div class="qi-meta">
+              <span class="qi-label">Last talk</span>
+              <span class="qi-value" id="card-last-talk">—</span>
+            </div>
+          </div>
+          <div class="qi-sep"></div>
+          <div class="qi-item">
+            <div class="qi-icon-wrap qi-cat">🏷️</div>
+            <div class="qi-meta">
+              <span class="qi-label">Category</span>
+              <span class="qi-value" id="card-category" title="Click to edit">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── INFO TILES: Memory / Note / Reminder ── -->
+        <div class="info-tiles">
+
+          <!-- Memory tile — clicking "+" opens memories modal -->
+          <div class="info-tile memory-tile" id="memory-tile" onclick="openMemoriesModalTab('memories')" role="button" tabindex="0" title="Open memories">
+            <div class="tile-icon-badge tile-badge-pink">🧠</div>
+            <div class="tile-body">
+              <span class="tile-tag">MEMORY</span>
+              <p class="tile-content" id="card-memory">No memory added yet.</p>
+            </div>
+            <button class="tile-overflow-btn" id="btn-tile-capsule" title="Seal a Time Capsule" aria-label="Time Capsule" onclick="event.stopPropagation(); openMemoriesModalTab('capsules')">⏳</button>
+            <span class="tile-caret">›</span>
+          </div>
+
+          <!-- Note tile — clicking edits inline via JS makeEditable -->
+          <div class="info-tile note-tile">
+            <div class="tile-icon-badge tile-badge-blue">📝</div>
+            <div class="tile-body">
+              <span class="tile-tag">NOTE</span>
+              <p class="tile-content" id="card-note" title="Click to edit">No notes yet.</p>
+            </div>
+            <span class="tile-caret" style="opacity:.35">✏️</span>
+          </div>
+
+          <!-- Reminder tile — clicking opens reminder/bell flow -->
+          <div class="info-tile reminder-tile" id="reminder-tile" onclick="document.getElementById('btn-remind').click()" role="button" tabindex="0" title="Set reminder">
+            <div class="tile-icon-badge tile-badge-amber">🔔</div>
+            <div class="tile-body">
+              <span class="tile-tag">REMINDER</span>
+              <span class="tile-content reminder-pill" id="card-reminder">No reminder set.</span>
+            </div>
+            <span class="tile-caret">›</span>
+          </div>
+
+        </div>
+
+        <!-- ── MAIN ACTION STRIP ── -->
+        <!--
+          ONE button per feature. No duplicates.
+          Chat, Call, Location, Ping, Voice
+        -->
+        <div class="action-strip">
+
+          <button class="action-btn action-chat" id="btn-message" title="Open chat" aria-label="Chat">
+            <div class="action-icon-toy action-toy-purple">💬</div>
+            <span class="chat-unread-badge" id="chat-unread-badge" style="display:none">0</span>
+            <span>Chat</span>
+          </button>
+
+          <button class="action-btn action-call" id="btn-call-contact" title="Voice call" aria-label="Call">
+            <div class="action-icon-toy action-toy-green">📞</div>
+            <span>Call</span>
+          </button>
+
+          <button class="action-btn action-location" id="btn-location" title="Live location" aria-label="Location">
+            <div class="action-icon-toy action-toy-orange">📍</div>
+            <span>Location</span>
+          </button>
+
+          <button class="action-btn action-ping" id="btn-ping" title="Send a ping" aria-label="Ping">
+            <div class="action-icon-toy action-toy-amber">⚡</div>
+            <span>Ping</span>
+          </button>
+
+          <button class="action-btn action-walkie" id="btn-walkie" title="Walkie-Talkie — hold to talk" aria-label="Walkie-Talkie">
+            <div class="action-icon-toy action-toy-teal" id="btn-walkie-icon">📻</div>
+            <span>Walkie</span>
+          </button>
+
+          <button class="action-btn action-voice" id="btn-voice" title="Record voice note" aria-label="Voice">
+            <div class="action-icon-toy action-toy-red" id="btn-voice-icon">🎤</div>
+            <span>Voice</span>
+          </button>
+
+        </div>
+
+        <!-- Hidden memories button needed as DOM fallback by JS -->
+        <button id="btn-memories" style="display:none" aria-hidden="true"></button>
+        <!-- Hidden voice icon span needed as DOM fallback by JS -->
+        <span id="btn-voice-icon-fallback" style="display:none" aria-hidden="true"></span>
+
+      </div>
+      <!-- /profile-card -->
+    </div>
+    <!-- /card-stack-wrapper -->
+
+  </div><!-- /page-wrapper -->
+
+
+  <!-- ══════════════════════════════════════════════
+       MY PROFILE MODAL
+  ══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="profile-modal-overlay">
+    <div class="modal-card" id="modal-card">
+
+      <div class="modal-header-premium">
+        <h2 class="modal-title">My Profile</h2>
+        <button class="modal-close-x" id="btn-close-profile-modal" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="profile-photo-input">Profile Photo</label>
+        <div class="profile-photo-row">
+          <div class="profile-photo-preview" id="profile-photo-preview">👤</div>
+          <div class="profile-photo-controls">
+            <input type="file" id="profile-photo-input" accept="image/*" style="display:none" />
+            <button type="button" class="btn-upload-photo" id="btn-upload-trigger">Choose Photo</button>
+            <input class="form-input" type="text" id="input-image-url" placeholder="Or paste image URL…" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="input-full-name">Display Name</label>
+        <input class="form-input" type="text" id="input-full-name" placeholder="Your name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="input-username">Username</label>
+        <input class="form-input" type="text" id="input-username" placeholder="e.g. janesmith" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="input-bio">Bio / Status</label>
+        <input class="form-input" type="text" id="input-bio" placeholder="Short bio or status…" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="input-birthday-modal">Birthday</label>
+        <input class="form-input" type="text" id="input-birthday-modal" placeholder="e.g. March 15" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="input-emergency-contact">Emergency Contact</label>
+        <input class="form-input" type="text" id="input-emergency-contact" placeholder="Mom: +1 555 000 1234" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="input-fav-color">Theme Colour</label>
+        <div class="color-picker-row">
+          <input type="color" id="input-fav-color" value="#f97316" class="color-picker-input" />
+          <span class="color-picker-label">Pick your accent colour</span>
+        </div>
+      </div>
+
+      <button class="btn-primary" id="btn-save-profile">Save Profile</button>
+      <button class="btn-danger" id="btn-close-profile-modal-bottom">Close</button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       CONNECT MODAL
+  ══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="connect-modal-overlay">
+    <div class="modal-card connect-modal-card">
+      <div class="modal-header-premium">
+        <h2 class="modal-title">Connect</h2>
+        <button class="modal-close-x" id="btn-close-connect-modal" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="your-code-section">
+        <p class="code-section-label">Your Connect Code</p>
+        <div class="connect-code-big" id="connect-code-big">——————</div>
+        <button class="btn-copy-code" id="btn-copy-big-code">📋 Copy Code</button>
+        <p class="form-hint">Share this with a friend to connect instantly</p>
+      </div>
+
+      <div class="divider-or">— or enter friend's code —</div>
+
+      <div class="form-group">
+        <label class="form-label" for="input-friend-code">Friend's Code</label>
+        <input class="form-input code-input-large" type="text" id="input-friend-code"
+               placeholder="A1B2C3" maxlength="6" autocomplete="off" />
+      </div>
+      <button class="btn-teal" id="btn-do-connect">Connect →</button>
+
+      <div class="connections-section" id="connections-section">
+        <p class="code-section-label" style="margin-top:18px">Connected People</p>
+        <div class="connections-list" id="connections-list">
+          <p class="no-conn-msg">No connections yet. Share your code!</p>
+        </div>
+      </div>
+
+      <div class="mood-status-block">
+        <p class="code-section-label">Your Live Mood &amp; Status</p>
+        <div class="mood-picker" id="mood-picker">
+          <button class="mood-btn" data-mood="😊">😊</button>
+          <button class="mood-btn" data-mood="🤔">🤔</button>
+          <button class="mood-btn" data-mood="😴">😴</button>
+          <button class="mood-btn" data-mood="😄">😄</button>
+          <button class="mood-btn" data-mood="😢">😢</button>
+          <button class="mood-btn" data-mood="🔥">🔥</button>
+          <button class="mood-btn" data-mood="🎯">🎯</button>
+          <button class="mood-btn" data-mood="🏃">🏃</button>
+        </div>
+        <input class="form-input" type="text" id="input-status-text"
+               placeholder="Status message…" maxlength="40" style="margin-top:8px" />
+        <button class="btn-primary" id="btn-save-mood" style="margin-top:8px">Update Status</button>
+      </div>
+
+      <button class="btn-danger" id="btn-close-connect-modal-bottom">Close</button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       CHAT DRAWER
+  ══════════════════════════════════════════════ -->
+  <div class="chat-overlay" id="chat-overlay">
+    <div class="chat-drawer" id="chat-drawer">
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <div class="chat-avatar-mini" id="chat-avatar-mini"></div>
+          <div>
+            <div class="chat-contact-name" id="chat-contact-name">—</div>
+            <div class="chat-typing-line" id="chat-typing-line"></div>
+          </div>
+        </div>
+        <button class="drawer-close-btn" id="btn-close-chat" aria-label="Close chat">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <div class="chat-messages-area" id="chat-messages-area">
+        <div class="chat-empty-state">
+          <div class="chat-empty-icon">💬</div>
+          <p>Start the conversation!</p>
+          <small>Real-time when connected via code.</small>
+        </div>
+      </div>
+
+      <div class="chat-footer">
+        <div class="unread-notice" id="unread-notice" style="display:none"></div>
+        <div class="chat-input-row">
+          <button class="chat-emoji-btn" title="Emoji" aria-label="Emoji">😊</button>
+          <input class="chat-input-field" type="text" id="chat-input-field"
+                 placeholder="Message…" maxlength="500" autocomplete="off" />
+          <button class="chat-voice-btn" id="btn-chat-voice" title="Voice note"
+                  onclick="document.getElementById('btn-voice').click()" aria-label="Voice note">🎤</button>
+          <button class="chat-send-btn" id="btn-send-msg" title="Send" aria-label="Send">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="white">
+              <path d="M2 21l21-9L2 3v7l15 2-15 2z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       LOCATION MODAL
+  ══════════════════════════════════════════════ -->
+  <!-- ══════════════════════════════════════════════
+       LOCATION MODAL
+  ══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="location-modal-overlay">
+    <div class="modal-card location-modal-card">
+      <!-- Floating Header -->
+      <div class="modal-header-row map-floating-header">
+        <h2 class="modal-title" style="margin:0">📍 Live Location</h2>
+        <button class="drawer-close-btn" id="btn-close-location-x" aria-label="Close">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Offline/Error Status Banner -->
+      <div class="map-status-banner" id="map-status-banner" style="display: none;"></div>
+      
+      <!-- Leaflet Map Container -->
+      <div id="leaflet-map" class="leaflet-map-box"></div>
+
+      <!-- Floating Map Controls (Right Side) -->
+      <div class="map-floating-controls">
+        <button class="map-control-btn" id="btn-map-my-loc" title="Recenter on Me">👤</button>
+        <button class="map-control-btn" id="btn-map-friend-loc" title="Recenter on Friend">👥</button>
+        <button class="map-control-btn" id="btn-map-fit-both" title="Fit Both in View">🗺️</button>
+        <button class="map-control-btn" id="btn-map-follow" title="Toggle Follow Friend">🔒</button>
+        <button class="map-control-btn" id="btn-map-history" title="Toggle Today's Path">⏳</button>
+      </div>
+      
+      <!-- Premium Glassmorphic Bottom Sheet -->
+      <div class="map-bottom-sheet" id="map-bottom-sheet">
+        <div class="bottom-sheet-handle" id="bottom-sheet-handle"></div>
+        
+        <!-- Collapsed state summary -->
+        <div class="bottom-sheet-header" id="bottom-sheet-header">
+          <div class="sheet-summary-avatar" id="sheet-summary-avatar">
+            <span class="sheet-avatar-placeholder">👤</span>
+          </div>
+          <div class="sheet-summary-info">
+            <div class="sheet-summary-title" id="sheet-summary-title">Friend Location</div>
+            <div class="sheet-summary-subtitle" id="sheet-summary-subtitle">Not sharing location</div>
+          </div>
+          <div class="sheet-toggle-icon">▲</div>
+        </div>
+        
+        <!-- Expanded content -->
+        <div class="bottom-sheet-content" id="bottom-sheet-content">
+          <hr class="sheet-divider">
+          
+          <div class="sheet-profile-card">
+            <div class="sheet-profile-avatar-wrapper">
+              <img class="sheet-profile-avatar" id="sheet-profile-avatar-img" src="" alt="Profile Image" style="display: none;">
+              <div class="sheet-profile-avatar-fallback" id="sheet-profile-avatar-fallback">👤</div>
+              <span class="sheet-profile-status-dot" id="sheet-profile-status-dot"></span>
+            </div>
+            <div class="sheet-profile-details">
+              <h3 id="sheet-profile-name">Friend Name</h3>
+              <div class="sheet-profile-mood" id="sheet-profile-mood">Live Mood: Unknown</div>
+              <div class="sheet-profile-eta" id="sheet-profile-eta">Distance: -</div>
+              <div class="sheet-profile-updated" id="sheet-profile-updated">Updated: -</div>
+            </div>
+          </div>
+
+          <!-- Action Buttons Strip -->
+          <div class="sheet-action-strip">
+            <button class="sheet-action-btn" id="btn-sheet-nav" title="Google Maps Navigation">
+              <span class="sheet-action-icon">🧭</span>
+              <span>Navigate</span>
+            </button>
+            <button class="sheet-action-btn" id="btn-sheet-call" title="Call Contact">
+              <span class="sheet-action-icon">📞</span>
+              <span>Call</span>
+            </button>
+            <button class="sheet-action-btn" id="btn-sheet-chat" title="Open Chat">
+              <span class="sheet-action-icon">💬</span>
+              <span>Chat</span>
+            </button>
+            <button class="sheet-action-btn" id="btn-sheet-follow-toggle" title="Follow Mode">
+              <span class="sheet-action-icon">🔒</span>
+              <span id="btn-sheet-follow-text">Follow</span>
+            </button>
+            <button class="sheet-action-btn" id="btn-sheet-profile" title="View Profile">
+              <span class="sheet-action-icon">❤️</span>
+              <span>Profile</span>
+            </button>
+          </div>
+
+          <!-- Sharing Toggle Section (Settings) -->
+          <div class="sheet-section">
+            <h4 class="sheet-section-title">📡 My Location Sharing</h4>
+            <div class="sheet-sharing-box">
+              <div id="friend-loc-text" style="display:none"></div>
+              <div id="friend-last-seen-row" style="display:none"><span id="friend-last-seen-text"></span></div>
+              <div class="loc-row" id="my-sharing-row" style="display:none; margin-bottom: 8px;">
+                <span class="loc-icon">📡</span>
+                <span class="loc-label" style="font-weight: 500; font-size: 13px;">Sharing until:</span>
+                <span class="loc-value" id="sharing-until-text" style="font-weight: bold; font-size: 13px; color: var(--accent-orange);">-</span>
+              </div>
+              <div class="sharing-controls-row">
+                <select class="form-input" id="share-duration-select" style="margin-bottom: 8px; width: 100%;">
+                  <option value="3600000">Share for 1 hour</option>
+                  <option value="14400000">Share for 4 hours</option>
+                  <option value="86400000">Share for 24 hours</option>
+                  <option value="0">Share indefinitely</option>
+                </select>
+                <button class="btn-teal" id="btn-share-location" style="width: 100%; padding: 10px;">📡 Share Live Location</button>
+                <button class="btn-danger" id="btn-stop-sharing" style="width: 100%; padding: 10px; display: none;">⏹ Stop Sharing</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Relationship Places / Save Spot -->
+          <div class="sheet-section">
+            <div class="sheet-section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h4 class="sheet-section-title" style="margin: 0;">📍 Relationship Places</h4>
+              <button class="btn-mini-heart" id="btn-save-current-place" style="font-size: 11px; padding: 4px 8px; border-radius: 12px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); cursor: pointer;" disabled>❤️ Save Place</button>
+            </div>
+            <div class="saved-places-list" id="saved-places-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto;">
+              <div class="places-empty-state" style="font-size: 12px; color: var(--ink-3); text-align: center; padding: 10px;">No saved spots yet. Stand together to save one!</div>
+            </div>
+          </div>
+
+          <!-- Nearby Memories -->
+          <div class="sheet-section" style="margin-top: 12px;">
+            <h4 class="sheet-section-title">📸 Nearby Memories</h4>
+            <div class="nearby-memories-list" id="nearby-memories-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 150px; overflow-y: auto;">
+              <div class="memories-empty-state" style="font-size: 12px; color: var(--ink-3); text-align: center; padding: 10px;">No memories geotagged near friend's position.</div>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save Spot Dialog -->
+  <div class="modal-overlay" id="save-place-modal-overlay" style="z-index: 2000;">
+    <div class="modal-card save-place-modal-card" style="width: min(340px, 90%);">
+      <div class="modal-header-row">
+        <h3 class="modal-title" style="margin:0">❤️ Save Relationship Place</h3>
+      </div>
+      <div class="save-place-body" style="padding: 15px 0; display: flex; flex-direction: column; gap: 10px;">
+        <label for="input-place-name" style="font-size: 11px; font-weight: bold; color: var(--ink-3);">PLACE NAME</label>
+        <input type="text" id="input-place-name" class="form-input" placeholder="e.g. First Meeting Cafe, Favorite Spot" style="width: 100%;">
+        
+        <label for="select-place-type" style="font-size: 11px; font-weight: bold; color: var(--ink-3); margin-top: 5px;">SPOT TYPE</label>
+        <select id="select-place-type" class="form-input" style="width: 100%;">
+          <option value="cafe">☕ Cafe</option>
+          <option value="restaurant">🍕 Restaurant</option>
+          <option value="nature">🌳 Park / Nature</option>
+          <option value="monument">🏛️ Landmark</option>
+          <option value="home">🏠 Sweet Home</option>
+          <option value="other">❤️ Other Memory Spot</option>
+        </select>
+      </div>
+      <div class="modal-buttons" style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px;">
+        <button class="btn-secondary" id="btn-cancel-save-place" style="padding: 8px 14px;">Cancel</button>
+        <button class="btn-teal" id="btn-confirm-save-place" style="padding: 8px 14px;">Save Spot</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       MEMORIES MODAL
+  ══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="memories-modal-overlay">
+    <div class="modal-card memories-modal-card">
+      <div class="modal-header-row">
+        <h2 class="modal-title" style="margin:0">🧠 Shared Space</h2>
+        <button class="drawer-close-btn" id="btn-close-memories-x" aria-label="Close">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Tab selectors -->
+      <div class="memories-tabs">
+        <button class="memory-tab-btn active" id="tab-btn-memories">📸 Memories</button>
+        <button class="memory-tab-btn" id="tab-btn-capsule">⏳ Time Capsule</button>
+      </div>
+
+      <!-- MEMORIES CONTENT -->
+      <div id="tab-content-memories" class="tab-pane active">
+        <!-- Memory Streak Pill -->
+        <div class="memory-streak-pill" id="memory-streak-pill">
+          ✨ Memory Streak: <b>0</b> this month
+        </div>
+
+        <div class="add-memory-area">
+          <textarea class="form-input memory-text-area" id="input-new-memory"
+                    placeholder="Write a memory, milestone or special moment…" rows="2" maxlength="300"></textarea>
+          
+          <div class="memory-meta-inputs">
+            <select class="form-input category-select" id="memory-category-select">
+              <option value="General">🏷️ General</option>
+              <option value="Milestone">🎯 Milestone</option>
+              <option value="Trip">✈️ Trip</option>
+              <option value="Funny">😂 Funny</option>
+              <option value="Deep Talk">💬 Deep Talk</option>
+              <option value="Gift">🎁 Gift</option>
+            </select>
+            <label class="memory-star-toggle" title="Star this special memory">
+              <input type="checkbox" id="chk-memory-star">
+              <span>⭐ Highlight</span>
+            </label>
+          </div>
+
+          <button class="btn-primary" id="btn-add-memory" style="margin-top:8px">✨ Save Memory</button>
+        </div>
+
+        <div class="memories-scroll" id="memories-scroll">
+          <div class="chat-empty-state">
+            <div class="chat-empty-icon">📸</div>
+            <p>No memories yet</p>
+            <small>Capture moments &amp; milestones together</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- TIME CAPSULE CONTENT -->
+      <div id="tab-content-capsule" class="tab-pane">
+        <div class="add-memory-area">
+          <p class="form-hint" style="margin-bottom:8px">Write a message today that unlocks on a specific date in the future!</p>
+          <textarea class="form-input memory-text-area" id="input-capsule-text"
+                    placeholder="Dear future us, today we..." rows="2" maxlength="300"></textarea>
+          
+          <div class="memory-meta-inputs">
+            <input type="date" class="form-input" id="input-capsule-date" style="flex:1">
+          </div>
+
+          <button class="btn-teal" id="btn-add-capsule" style="margin-top:8px">🔒 Seal Time Capsule</button>
+        </div>
+
+        <div class="capsules-scroll" id="capsules-scroll">
+          <div class="chat-empty-state">
+            <div class="chat-empty-icon">🔒</div>
+            <p>No capsules sealed yet</p>
+            <small>Surprise your future selves</small>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn-danger" id="btn-close-memories-modal">Close</button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       BOND TIMELINE MODAL
+  ══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="timeline-modal-overlay">
+    <div class="modal-card storybook-modal-card">
+      <div class="modal-header-premium">
+        <h2 class="modal-title">📖 Relationship Storybook</h2>
+        <button class="modal-close-x" id="btn-close-timeline-x" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+
+      <!-- Storybook Cover / Summary Card -->
+      <div class="storybook-cover" id="storybook-cover">
+        <div class="storybook-title-wrap">
+          <span class="storybook-badge">OUR JOURNEY</span>
+          <h3 class="storybook-names" id="storybook-names">You &amp; Friend</h3>
+          <p class="storybook-subtitle">A curated chapter of your relationship milestones.</p>
+        </div>
+
+        <div class="storybook-quick-stats">
+          <div class="story-stat">
+            <span class="story-stat-val" id="story-stat-score">50</span>
+            <span class="story-stat-label">Bond Score</span>
+          </div>
+          <div class="story-stat">
+            <span class="story-stat-val" id="story-stat-mems">0</span>
+            <span class="story-stat-label">Memories</span>
+          </div>
+          <div class="story-stat">
+            <span class="story-stat-val" id="story-stat-pings">0</span>
+            <span class="story-stat-label">Check-ins</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Timeline Narrative List -->
+      <div class="timeline-scroll" id="timeline-scroll"></div>
+
+      <div class="storybook-actions" style="margin-top:18px;display:flex;gap:10px;">
+        <button class="btn-primary" id="btn-export-storybook" style="flex:1">📸 Export Storybook Page</button>
+        <button class="btn-danger" id="btn-close-timeline-modal" style="flex:1">Close</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       CAPSULE UNLOCK MODAL
+  ══════════════════════════════════════════════ -->
+  <div class="modal-overlay" id="capsule-open-overlay" style="z-index: 100000;">
+    <div class="modal-card capsule-open-card">
+      <div class="capsule-open-emoji">🎉</div>
+      <h3 class="capsule-open-title">Time Capsule Unlocked!</h3>
+      <div class="capsule-open-letter">
+        <p class="capsule-open-message" id="capsule-open-message"></p>
+      </div>
+      <p class="capsule-open-meta" id="capsule-open-meta"></p>
+      <button class="btn-primary" id="btn-close-capsule-open" style="margin-top: 15px;">Close Capsule</button>
+    </div>
+  </div>
+
+
+  <!-- ══════════════════════════════════════════════
+       INCOMING CALL OVERLAY
+  ══════════════════════════════════════════════ -->
+  <div id="incoming-call-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99999;align-items:center;justify-content:center;backdrop-filter:blur(8px)">
+    <div style="background:#fff;padding:32px 28px;border-radius:36px;box-shadow:0 24px 72px rgba(0,0,0,0.28);text-align:center;max-width:300px;width:90%;animation:scaleUp .35s cubic-bezier(.34,1.56,.64,1)">
+      <div style="font-size:52px;margin-bottom:12px;animation:wobble 1s infinite">📞</div>
+      <h3 style="font-size:19px;font-weight:800;color:#111;margin-bottom:6px">Incoming Call</h3>
+      <p id="call-subtitle-incoming" style="font-size:13px;color:#777;margin-bottom:22px">Someone is calling…</p>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button id="btn-accept-call" style="background:linear-gradient(145deg,#10b981,#059669);color:#fff;border:none;padding:13px 26px;border-radius:50px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 6px 18px rgba(16,185,129,.4)">Accept</button>
+        <button id="btn-decline-call" style="background:linear-gradient(145deg,#ef4444,#dc2626);color:#fff;border:none;padding:13px 26px;border-radius:50px;font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 6px 18px rgba(239,68,68,.4)">Decline</button>
+      </div>
+    </div>
+  </div>
+
+  <audio id="remote-audio" autoplay style="display:none"></audio>
+  <audio id="ringtone-audio" loop src="https://assets.mixkit.co/active_storage/sfx/1359/1359-84.wav" style="display:none"></audio>
+
+
+  <!-- ══════════════════════════════════════════════
+       SCRIPTS
+  ══════════════════════════════════════════════ -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="script.js" defer></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      // Wire bottom close buttons
+      ['btn-close-profile-modal-bottom','btn-close-connect-modal-bottom'].forEach(function(id) {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const overlayId = id.includes('profile') ? 'profile-modal-overlay' : 'connect-modal-overlay';
+        btn.addEventListener('click', function() {
+          document.getElementById(overlayId).classList.remove('active');
+        });
+      });
+
+      // Memory tile keyboard accessibility
+      ['memory-tile','reminder-tile'].forEach(function(id){
+        const el = document.getElementById(id);
+        if(el) el.addEventListener('keydown', function(e){
+          if(e.key==='Enter'||e.key===' ') el.click();
+        });
+      });
+    });
+  </script>
+</body>
+</html>
